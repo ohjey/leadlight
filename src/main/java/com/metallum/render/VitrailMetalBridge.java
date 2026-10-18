@@ -1,5 +1,8 @@
 package com.metallum.render;
 
+import com.metallum.mtl.MTLDevice;
+import com.mojang.blaze3d.buffers.GpuBuffer;
+import com.mojang.blaze3d.textures.GpuSampler;
 import com.mojang.blaze3d.textures.GpuTexture;
 import com.mojang.blaze3d.textures.GpuTextureView;
 import org.jspecify.annotations.Nullable;
@@ -33,5 +36,37 @@ public final class VitrailMetalBridge {
 	/** Metallum calls this on every texture a pass draws into, so a later clear is not skipped. */
 	public static void markContentsDirty(GpuTexture texture) {
 		((MetalGpuTexture) texture).markContentsDirty();
+	}
+
+	/** The Metal device behind Metallum's device backend. */
+	public static MTLDevice device(Object deviceBackend) {
+		return ((MetalDevice) deviceBackend).metalDevice();
+	}
+
+	/** The Metal buffer behind a buffer, as it stands now (a dynamic one changes backing). */
+	public static MemorySegment nativeHandle(GpuBuffer buffer) {
+		return ((MetalGpuBuffer) buffer).nativeHandle();
+	}
+
+	/** The Metal sampler state behind a sampler. */
+	public static MemorySegment nativeHandle(GpuSampler sampler) {
+		return ((MetalGpuSampler) sampler).nativeHandle();
+	}
+
+	/** Queues a release for when the frames that may still use a handle have finished. */
+	public static void releaseLater(Object deviceBackend, MemorySegment handle) {
+		((MetalDevice) deviceBackend).queueResourceRelease(handle);
+	}
+
+	/** A bit for each resource of a compiled pipeline whose name is one of these. */
+	public static long bindingMask(Object compiledPipeline, java.util.Set<String> names) {
+		long mask = 0L;
+		for (MetalCompiledRenderPipeline.ResourceBinding binding
+				: ((MetalCompiledRenderPipeline) compiledPipeline).resources()) {
+			if (names.contains(binding.name()) && binding.bindingIndex() < Long.SIZE) {
+				mask |= 1L << binding.bindingIndex();
+			}
+		}
+		return mask;
 	}
 }

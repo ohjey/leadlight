@@ -186,6 +186,70 @@ public final class ComputeShader {
 	 * have the same lifetime as this call, and {@code rebind} rewrites the bytes after the store
 	 * has copied them.
 	 */
+	/** A compute built for Metal: the kernel, and the entries its bindings are numbered by. */
+	public record MetalCompiled(dev.vitrailmetal.metal.MetalKernel kernel, List<Binding> entries) {
+	}
+
+	/**
+	 * The same road as {@link #build}, cache and zeroed locals included, ending in a Metal kernel
+	 * rather than a Vulkan shader module.
+	 */
+	public static @Nullable MetalCompiled buildMetal(com.metallum.mtl.MTLDevice device, String label,
+			String source, String stage, Function<String, @Nullable ByteBuffer> compile) throws Exception {
+		long began = System.nanoTime();
+		IntermediaryShaderModule module = null;
+		RawLocals.begin();
+		try {
+			String key = ModuleCache.keyOf(source, stage);
+			module = ModuleCache.lookup(key, label);
+			if (module == null) {
+				ByteBuffer spirv = compile.apply(source);
+				ModuleCache.building(label);
+				if (spirv == null) {
+					return null;
+				}
+				module = IntermediaryShaderModule.createFromSpirv(label, RawLocals.patch(label, spirv));
+				ModuleCache.store(key, module);
+			}
+
+			List<Binding> entries = rebind(module);
+			dev.vitrailmetal.metal.MetalKernel kernel =
+					dev.vitrailmetal.metal.MetalKernel.build(device, module.spirv(), label);
+			return kernel == null ? null : new MetalCompiled(kernel, entries);
+		} finally {
+			RawLocals.end();
+			if (module != null) {
+				module.close();
+			}
+			LoadClock.module(System.nanoTime() - began);
+		}
+	}
+
+	/** Numbers the module's resources by their place in the entry list, buffers first. */
+	private static List<Binding> rebind(IntermediaryShaderModule module) throws Exception {
+		IntermediaryShaderModuleAccessor access = (IntermediaryShaderModuleAccessor) (Object) module;
+		List<VulkanBindGroupLayout.Entry> entries = new ArrayList<>();
+		for (Object buffer : access.vitrail$uniformBuffers()) {
+			entries.add(new VulkanBindGroupLayout.Entry(
+					VulkanBindGroupLayout.VulkanBindGroupEntryType.UNIFORM_BUFFER,
+					nameOf(buffer, UNIFORM_NAME), null));
+		}
+		for (Object sampler : access.vitrail$samplers()) {
+			entries.add(new VulkanBindGroupLayout.Entry(
+					VulkanBindGroupLayout.VulkanBindGroupEntryType.SAMPLED_IMAGE,
+					nameOf(sampler, SAMPLER_NAME), null));
+		}
+		List<VulkanBindGroupLayout.Entry> frozen = List.copyOf(entries);
+		module.rebind(List.of(), frozen);
+		List<Binding> bindings = new ArrayList<>(frozen.size());
+		for (VulkanBindGroupLayout.Entry entry : frozen) {
+			bindings.add(new Binding(
+					entry.type() == VulkanBindGroupLayout.VulkanBindGroupEntryType.UNIFORM_BUFFER,
+					entry.name()));
+		}
+		return List.copyOf(bindings);
+	}
+
 	private static Compiled compile(VulkanDevice vulkan, IntermediaryShaderModule module) {
 		try {
 			IntermediaryShaderModuleAccessor access =

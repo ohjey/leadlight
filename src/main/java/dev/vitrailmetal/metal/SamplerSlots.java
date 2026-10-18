@@ -37,6 +37,9 @@ public final class SamplerSlots {
 	/** Added to Metallum's compiled pipeline. */
 	public interface Holder {
 		byte @Nullable [] vitrail$samplerSlots();
+
+		/** Bits of the resources the pipeline reads through a shadow comparison. */
+		long vitrail$comparedMask();
 	}
 
 	private SamplerSlots() {

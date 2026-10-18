@@ -7,6 +7,8 @@ import com.metallum.mtl.MTLRenderCommandEncoder;
 import com.mojang.blaze3d.textures.GpuTextureView;
 import dev.vitrailmetal.metal.MultiTarget;
 import dev.vitrailmetal.metal.SamplerSlots;
+import dev.vitrailmetal.metal.MetalHost;
+import dev.vitrailmetal.render.ShadowCompare;
 import org.joml.Vector4fc;
 import org.jspecify.annotations.Nullable;
 import org.spongepowered.asm.mixin.Final;
@@ -137,10 +139,13 @@ public abstract class MetalRenderPassMixin implements MultiTarget.Pass {
 							+ "Ljava/lang/foreign/MemorySegment;JI)V"))
 	private void vitrail$bind(MTLRenderCommandEncoder encoder, MemorySegment texture,
 			MemorySegment sampler, long index, int stageMask) {
-		byte[] slots = this.vitrail$pipeline instanceof SamplerSlots.Holder holder
-				? holder.vitrail$samplerSlots()
-				: null;
+		SamplerSlots.Holder holder = this.vitrail$pipeline instanceof SamplerSlots.Holder held ? held : null;
+		byte[] slots = holder == null ? null : holder.vitrail$samplerSlots();
 		int binding = (int) index;
+		if (holder != null && ShadowCompare.noted() && binding < Long.SIZE
+				&& (holder.vitrail$comparedMask() & (1L << binding)) != 0L) {
+			sampler = MetalHost.compareSampler();
+		}
 		if ((stageMask & STAGE_VERTEX) != 0) {
 			encoder.setVertexTexture(texture, index);
 			encoder.setVertexSamplerState(sampler, SamplerSlots.slot(slots, binding, SamplerSlots.VERTEX));

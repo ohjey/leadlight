@@ -8,6 +8,8 @@ import com.mojang.blaze3d.pipeline.RenderPipeline;
 import dev.vitrailmetal.metal.MultiTarget;
 import dev.vitrailmetal.metal.PipelineTargets;
 import dev.vitrailmetal.metal.SamplerSlots;
+import dev.vitrailmetal.render.ShadowCompare;
+import com.metallum.render.VitrailMetalBridge;
 import org.jspecify.annotations.Nullable;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Shadow;
@@ -32,6 +34,13 @@ public abstract class MetalCompiledRenderPipelineMixin implements SamplerSlots.H
 
 	@Unique
 	private @Nullable PipelineTargets vitrail$targets;
+
+	@Unique
+	private @Nullable RenderPipeline vitrail$info;
+
+	/** Bits of the resources read through a shadow comparison, or -1 until first asked. */
+	@Unique
+	private long vitrail$compared = -1L;
 
 	@Shadow
 	abstract MemorySegment getNativePipeline(boolean depth);
@@ -59,6 +68,19 @@ public abstract class MetalCompiledRenderPipelineMixin implements SamplerSlots.H
 	private void vitrail$built(CallbackInfo callback, @Local(argsOnly = true) RenderPipeline pipeline) {
 		this.vitrail$samplerSlots = SamplerSlots.take();
 		this.vitrail$targets = PipelineTargets.take(pipeline);
+		this.vitrail$info = pipeline;
+	}
+
+	@Override
+	public long vitrail$comparedMask() {
+		long mask = this.vitrail$compared;
+		if (mask < 0L) {
+			RenderPipeline info = this.vitrail$info;
+			java.util.Set<String> names = info == null ? java.util.Set.of() : ShadowCompare.compared(info);
+			mask = names.isEmpty() ? 0L : VitrailMetalBridge.bindingMask(this, names);
+			this.vitrail$compared = mask;
+		}
+		return mask;
 	}
 
 	@Override

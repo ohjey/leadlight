@@ -6,7 +6,6 @@ import dev.vitrailmetal.glsl.SharedMemory;
 import dev.vitrailmetal.glsl.TranslatedUnit;
 import dev.vitrailmetal.mixin.access.CommandEncoderAccessor;
 import dev.vitrailmetal.mixin.access.GpuDeviceAccessor;
-import dev.vitrailmetal.mixin.access.VulkanCommandEncoderAccessor;
 import dev.vitrailmetal.pack.model.ProgramNames;
 import dev.vitrailmetal.pack.model.ProgramStage;
 import dev.vitrailmetal.pack.model.RenderStage;
@@ -33,41 +32,23 @@ import com.mojang.blaze3d.systems.GpuDevice;
 import com.mojang.blaze3d.systems.GpuDeviceBackend;
 import com.mojang.blaze3d.systems.RenderSystem;
 import com.mojang.blaze3d.textures.FilterMode;
+import com.mojang.blaze3d.textures.GpuSampler;
+import com.mojang.blaze3d.textures.GpuTexture;
 import com.mojang.blaze3d.textures.GpuTextureView;
-import com.mojang.blaze3d.vulkan.VulkanCommandEncoder;
-import com.mojang.blaze3d.vulkan.VulkanDevice;
-import com.mojang.blaze3d.vulkan.VulkanGpuBuffer;
-import com.mojang.blaze3d.vulkan.VulkanGpuSampler;
-import com.mojang.blaze3d.vulkan.VulkanGpuTextureView;
-import com.mojang.blaze3d.vulkan.VulkanUtils;
+import com.metallum.mtl.MTLDevice;
+import com.metallum.render.VitrailMetalBridge;
+import dev.vitrailmetal.metal.MetalCompute;
+import dev.vitrailmetal.metal.MetalHost;
+import dev.vitrailmetal.metal.MetalKernel;
+import org.jspecify.annotations.Nullable;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.renderer.MappableRingBuffer;
-import org.lwjgl.PointerBuffer;
 import org.lwjgl.system.MemoryStack;
 import org.lwjgl.system.MemoryUtil;
 import org.lwjgl.util.shaderc.Shaderc;
-import org.lwjgl.util.vma.Vma;
-import org.lwjgl.util.vma.VmaAllocationCreateInfo;
-import org.lwjgl.vulkan.KHRPushDescriptor;
-import org.lwjgl.vulkan.KHRSynchronization2;
-import org.lwjgl.vulkan.VK12;
-import org.lwjgl.vulkan.VK13;
-import org.lwjgl.vulkan.VkBufferCreateInfo;
-import org.lwjgl.vulkan.VkCommandBuffer;
-import org.lwjgl.vulkan.VkComputePipelineCreateInfo;
-import org.lwjgl.vulkan.VkDependencyInfo;
-import org.lwjgl.vulkan.VkDescriptorBufferInfo;
-import org.lwjgl.vulkan.VkDescriptorImageInfo;
-import org.lwjgl.vulkan.VkDescriptorSetLayoutBinding;
-import org.lwjgl.vulkan.VkDescriptorSetLayoutCreateInfo;
-import org.lwjgl.vulkan.VkMemoryBarrier2;
-import org.lwjgl.vulkan.VkPipelineLayoutCreateInfo;
-import org.lwjgl.vulkan.VkPipelineShaderStageCreateInfo;
-import org.lwjgl.vulkan.VkWriteDescriptorSet;
 
 import java.io.IOException;
 import java.nio.ByteBuffer;
-import java.nio.LongBuffer;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -412,25 +393,17 @@ final class PackCompute implements AutoCloseable {
 		}
 
 		// The hold first, as the head-of-frame dispatch does: the first pass of a chain half can
-		// still have the geometry's render pass object open over it, and ending the pass
-		// underneath would leave that object to close a pass the encoder no longer has.
+		// still have the geometry's render pass object open over it.
 		GeometryHold.flush(() -> "the compute dispatch at " + program);
 		GpuRecording.endPass(encoder);
-		VulkanCommandEncoder recorder = recorder(encoder);
-		VulkanDevice vulkan = vulkan(device);
-		if (recorder == null || vulkan == null) {
+		MTLDevice metal = metal(device);
+		if (metal == null) {
 			return;
-		}
-
-		VkCommandBuffer commands = ((VulkanCommandEncoderAccessor) recorder).vitrail$commandBuffer();
-		try (MemoryStack stack = MemoryStack.stackPush()) {
-			beforeChainCompute(commands, stack);
 		}
 
 		for (Pass pass : attached) {
 			try {
-				pass.dispatch(vulkan, recorder, commands, values, targets, width, height, step, depth,
-						distant);
+				pass.dispatch(metal, encoder, values, targets, width, height, step, depth, distant);
 			} catch (GpuDeviceLossException e) {
 				throw e;
 			} catch (RuntimeException e) {
@@ -438,10 +411,6 @@ final class PackCompute implements AutoCloseable {
 					Vitrail.logger().warn("compute {} failed: {}", pass.path, e.toString());
 				}
 			}
-		}
-
-		try (MemoryStack stack = MemoryStack.stackPush()) {
-			afterChainCompute(commands, stack);
 		}
 
 		if (this.announcedChains.add(program)) {
@@ -469,22 +438,16 @@ final class PackCompute implements AutoCloseable {
 		// encoder no longer has, which is a crash at the next flush and not here.
 		GeometryHold.flush(() -> "the shadow compute dispatch");
 		GpuRecording.endPass(encoder);
-		VulkanCommandEncoder recorder = recorder(encoder);
-		VulkanDevice vulkan = vulkan(device);
-		if (recorder == null || vulkan == null) {
+		MTLDevice metal = metal(device);
+		if (metal == null) {
 			return;
 		}
 
-		VkCommandBuffer commands = ((VulkanCommandEncoderAccessor) recorder).vitrail$commandBuffer();
 		values.convention(ClipSpace.FORWARD);
 		values.modelView(null, null);
 		values.projection(null);
 		values.passColour(null);
 		values.renderStage(RenderStage.NONE);
-		try (MemoryStack stack = MemoryStack.stackPush()) {
-			afterShadowGeometry(commands, stack);
-		}
-
 		// Asked of the game and not of ColorTargets, which is the same number one frame late or
 		// nought on the first. ColorTargets.screenWidth is only written by its ensure(), which
 		// runs inside the world render, while this dispatch is placed at the head of the frame
@@ -498,7 +461,7 @@ final class PackCompute implements AutoCloseable {
 		int height = main == null ? 0 : main.height;
 		for (Pass pass : this.passes) {
 			try {
-				pass.dispatch(vulkan, recorder, commands, values, targets, width, height, null, null, null);
+				pass.dispatch(metal, encoder, values, targets, width, height, null, null, null);
 			} catch (GpuDeviceLossException e) {
 				throw e;
 			} catch (RuntimeException e) {
@@ -506,10 +469,6 @@ final class PackCompute implements AutoCloseable {
 					Vitrail.logger().warn("shadow compute {} failed: {}", pass.path, e.toString());
 				}
 			}
-		}
-
-		try (MemoryStack stack = MemoryStack.stackPush()) {
-			afterCompute(commands, stack);
 		}
 
 		if (!this.announced) {
@@ -543,15 +502,10 @@ final class PackCompute implements AutoCloseable {
 		this.alone.values().forEach(list -> list.forEach(Pass::close));
 	}
 
-	private static VulkanCommandEncoder recorder(CommandEncoder encoder) {
-		return ((CommandEncoderAccessor) encoder).vitrail$backend() instanceof VulkanCommandEncoder vulkan
-				? vulkan
-				: null;
-	}
-
-	private static VulkanDevice vulkan(GpuDevice device) {
+	/** The Metal device, or null where the game is not on Metallum. */
+	private static @Nullable MTLDevice metal(GpuDevice device) {
 		GpuDeviceBackend backend = ((GpuDeviceAccessor) device).vitrail$backend();
-		return backend instanceof VulkanDevice found ? found : null;
+		return MetalHost.isMetal(device) ? VitrailMetalBridge.device(backend) : null;
 	}
 
 	/**
@@ -626,7 +580,7 @@ final class PackCompute implements AutoCloseable {
 	 * {@code watershadow} read a depth image without carrying the word, and which of the pair they
 	 * read is the program's answer rather than the name's.
 	 */
-	private static long samplerFor(ColorTargets targets, SamplerPlan samplers, String name) {
+	private static GpuSampler samplerFor(ColorTargets targets, SamplerPlan samplers, String name) {
 		boolean noise = "noisetex".equals(name);
 		// Every other name keeps the answer this line gave before there was one place to ask:
 		// customImageFilter is NEAREST for a name no image directive declared.
@@ -643,7 +597,7 @@ final class PackCompute implements AutoCloseable {
 		boolean mipmaps = !noise && samplers.binding(name).kind() == SamplerPlan.Kind.SHADOW_DEPTH
 				&& targets.shadow().depthMipmapped(samplers.withoutTranslucents(name));
 
-		return ((VulkanGpuSampler) PackPass.sampler(noise, filter, mipmaps)).vkSampler();
+		return PackPass.sampler(noise, filter, mipmaps);
 	}
 
 	/**
@@ -652,75 +606,6 @@ final class PackCompute implements AutoCloseable {
 	 * compute-to-compute storage only, which does not cover a sampled read of a volume the
 	 * geometry just wrote.
 	 */
-	private static void afterShadowGeometry(VkCommandBuffer commands, MemoryStack stack) {
-		shaderBarrier(commands, stack,
-				VK13.VK_PIPELINE_STAGE_2_ALL_GRAPHICS_BIT
-						| VK13.VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
-				VK13.VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT
-						| VK13.VK_ACCESS_2_SHADER_STORAGE_READ_BIT,
-				VK13.VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
-				VK13.VK_ACCESS_2_SHADER_STORAGE_READ_BIT
-						| VK13.VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT
-						| VK13.VK_ACCESS_2_SHADER_SAMPLED_READ_BIT);
-	}
-
-	/**
-	 * Makes the floodfill {@code imageStore} visible to the next frame's gbuffers, which sample
-	 * those volumes as {@code sampler3D}.
-	 */
-	private static void afterCompute(VkCommandBuffer commands, MemoryStack stack) {
-		shaderBarrier(commands, stack, VK13.VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
-				VK13.VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT,
-				VK13.VK_PIPELINE_STAGE_2_ALL_GRAPHICS_BIT
-						| VK13.VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
-				VK13.VK_ACCESS_2_SHADER_SAMPLED_READ_BIT
-						| VK13.VK_ACCESS_2_SHADER_STORAGE_READ_BIT
-						| VK13.VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT);
-	}
-
-	/**
-	 * Makes what the passes before this point drew, colour writes and storage writes alike, visible
-	 * to a compute that samples or stores it. The render pass has already closed on the game's own
-	 * barrier, which orders graphics against graphics; this names the compute stage as the reader.
-	 */
-	private static void beforeChainCompute(VkCommandBuffer commands, MemoryStack stack) {
-		shaderBarrier(commands, stack, VK13.VK_PIPELINE_STAGE_2_ALL_GRAPHICS_BIT,
-				VK13.VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT
-						| VK13.VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT,
-				VK13.VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
-				VK13.VK_ACCESS_2_SHADER_SAMPLED_READ_BIT
-						| VK13.VK_ACCESS_2_SHADER_STORAGE_READ_BIT
-						| VK13.VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT);
-	}
-
-	/**
-	 * Makes a compute's image stores visible to the pass that follows, which samples them, and to
-	 * the attachment writes a later pass makes to the same target. Iris's memory barrier after its
-	 * loop, {@code CompositeRenderer.java:297}: image access, texture fetch and shader storage.
-	 */
-	private static void afterChainCompute(VkCommandBuffer commands, MemoryStack stack) {
-		shaderBarrier(commands, stack, VK13.VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
-				VK13.VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT,
-				VK13.VK_PIPELINE_STAGE_2_ALL_GRAPHICS_BIT
-						| VK13.VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
-				VK13.VK_ACCESS_2_SHADER_SAMPLED_READ_BIT
-						| VK13.VK_ACCESS_2_COLOR_ATTACHMENT_READ_BIT
-						| VK13.VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT
-						| VK13.VK_ACCESS_2_SHADER_STORAGE_READ_BIT);
-	}
-
-	private static void shaderBarrier(VkCommandBuffer commands, MemoryStack stack, long srcStage,
-			long srcAccess, long dstStage, long dstAccess) {
-		VkMemoryBarrier2.Buffer barrier = VkMemoryBarrier2.calloc(1, stack).sType$Default();
-		barrier.srcStageMask(srcStage);
-		barrier.srcAccessMask(srcAccess);
-		barrier.dstStageMask(dstStage);
-		barrier.dstAccessMask(dstAccess);
-		VkDependencyInfo dependency = VkDependencyInfo.calloc(stack).sType$Default();
-		dependency.pMemoryBarriers(barrier);
-		KHRSynchronization2.vkCmdPipelineBarrier2KHR(commands, dependency);
-	}
-
 	private static final class Pass {
 
 		private final PackProgram.Compute compute;
@@ -733,30 +618,23 @@ final class PackCompute implements AutoCloseable {
 
 		/**
 		 * Which stage a {@code texture.<stage>.<sampler>} line has to name for this compute to read
-		 * the file behind it. A shadow compute is the {@code shadowcomp} stage by construction: it
-		 * hangs off no pass, so there is nothing else it could be.
+		 * the file behind it. A shadow compute is the {@code shadowcomp} stage by construction.
 		 */
 		private final TextureStage textureStage;
 
 		private final String label;
 		private final Set<String> failed = new LinkedHashSet<>();
 		private MappableRingBuffer block;
-		private long shaderModule;
-		private long setLayout;
-		/** Whether the set layout lost its push flag to {@link WideSamplerSets}. */
-		private boolean allocatedSets;
-		private long pipelineLayout;
-		private long pipeline;
+		private @Nullable MetalKernel kernel;
 		private List<ComputeShader.Binding> entries = List.of();
 		private boolean compiled;
 
 		/**
 		 * The std430 size of the block {@link SharedMemory} moved this compute's shared variables
-		 * into, or 0 where they keep their threadgroup memory, which is everywhere but MoltenVK.
+		 * into, or 0 where they keep their threadgroup memory.
 		 */
 		private long sharedBytes;
-		private long sharedBuffer;
-		private long sharedAllocation;
+		private @Nullable GpuBuffer sharedBuffer;
 
 		private Pass(PackProgram.Compute compute, UniformCatalog catalog, int load, String path,
 				String program) {
@@ -771,38 +649,80 @@ final class PackCompute implements AutoCloseable {
 			this.uniforms = new PackUniforms(compute.loaded().program().uniforms(), catalog);
 		}
 
+		/** One resource resolved for a dispatch: a buffer, or a texture with or without a sampler. */
+		private record Bound(@Nullable GpuBuffer buffer, long offset, @Nullable GpuTextureView view,
+				@Nullable GpuSampler sampler) {
+
+			static Bound buffer(GpuBuffer buffer, long offset) {
+				return new Bound(buffer, offset, null, null);
+			}
+
+			static Bound texture(GpuTextureView view, @Nullable GpuSampler sampler) {
+				return new Bound(null, 0L, view, sampler);
+			}
+		}
+
 		/**
 		 * @param step    the halves of the pass this compute hangs off, or null for a shadow
 		 *                compute, which reads no colour target
-		 * @param depth   the depth the pass this compute hangs off reads, or null for a shadow
-		 *                compute, which is dispatched before the frame has one: {@code depthtex0}
-		 *                then reads the far plane, and the two copies read what they last held,
-		 *                as they do for a pass drawn before the copy is taken
+		 * @param depth   the depth the pass this compute hangs off reads, or null for a shadow compute
 		 * @param distant the far terrain's depth on the same terms
-		 * @param recorder the encoder {@code commands} belongs to, whose slot an allocated set lives in
 		 */
-		private void dispatch(VulkanDevice vulkan, VulkanCommandEncoder recorder,
-				VkCommandBuffer commands, PackValues values, ColorTargets targets, int width,
-				int height, TargetSchedule.Bound step, GpuTextureView depth, GpuTextureView distant) {
+		private void dispatch(MTLDevice metal, CommandEncoder encoder, PackValues values,
+				ColorTargets targets, int width, int height, TargetSchedule.Bound step,
+				GpuTextureView depth, GpuTextureView distant) {
 			if (!this.compiled) {
-				compile(vulkan);
+				compile(metal);
 			}
 
-			if (this.pipeline == 0L) {
+			MetalKernel kernel = this.kernel;
+			if (kernel == null) {
 				return;
 			}
 
 			writeBlock(values);
-			try (MemoryStack stack = MemoryStack.stackPush()) {
-				VulkanCommandEncoder.memoryBarrier(commands, stack);
-				VK12.vkCmdBindPipeline(commands, VK12.VK_PIPELINE_BIND_POINT_COMPUTE, this.pipeline);
-				pushDescriptors(recorder, commands, stack, targets, step, depth, distant);
-				// The screen and not the shadow map: Iris sizes a shadow composite's compute off
-				// the main render target, ShadowCompositeRenderer.java:213-214, and the resolution
-				// of the shadow map is what it sizes the shadow GEOMETRY computes off instead,
-				// IrisRenderingPipeline.java:908.
+			Bound[] bound = new Bound[this.entries.size()];
+			List<GpuTexture> touched = new ArrayList<>();
+			for (int i = 0; i < bound.length; i++) {
+				bound[i] = resolve(this.entries.get(i), targets, step, depth, distant);
+				if (bound[i].view() != null) {
+					touched.add(bound[i].view().texture());
+				}
+			}
+
+			MetalCompute pass = MetalCompute.open(encoder, touched);
+			if (pass == null) {
+				return;
+			}
+
+			try (pass) {
+				pass.pipeline(kernel.pipeline());
+				for (MetalKernel.Slot slot : kernel.slots()) {
+					Bound one = slot.binding() < bound.length ? bound[slot.binding()] : null;
+					if (one == null) {
+						continue;
+					}
+
+					if (one.buffer() != null) {
+						pass.buffer(VitrailMetalBridge.nativeHandle(one.buffer()), one.offset(), slot.index());
+						continue;
+					}
+
+					pass.texture(VitrailMetalBridge.nativeHandle(one.view()), slot.index());
+					if (slot.sampler() >= 0 && one.sampler() != null) {
+						pass.sampler(VitrailMetalBridge.nativeHandle(one.sampler()), slot.sampler());
+					}
+				}
+
 				int[] groups = this.compute.groupsAt(width, height);
-				VK12.vkCmdDispatch(commands, groups[0], groups[1], groups[2]);
+				pass.dispatch(groups[0], groups[1], groups[2], kernel.localX(), kernel.localY(),
+						kernel.localZ());
+			}
+
+			for (Bound one : bound) {
+				if (one.view() != null && one.sampler() == null) {
+					VitrailMetalBridge.markContentsDirty(one.view().texture());
+				}
 			}
 
 			if (this.block != null) {
@@ -810,19 +730,16 @@ final class PackCompute implements AutoCloseable {
 			}
 		}
 
-		private void compile(VulkanDevice vulkan) {
+		private void compile(MTLDevice metal) {
 			this.compiled = true;
 			TranslatedUnit unit = this.compute.loaded().program().stages().get(ProgramStage.COMPUTE);
 			if (unit == null) {
 				return;
 			}
 
-			// ComputeShader builds the module, through the disk store and with the zeroes the game's
-			// compiler road gets, and clocks what that cost: the steps differ between the two games
-			// the tree builds for, and the layout and the pipeline below do not.
-			ComputeShader.Compiled compiled;
+			ComputeShader.MetalCompiled built;
 			try {
-				compiled = ComputeShader.build(vulkan, this.label, sharedMemory(unit.text()),
+				built = ComputeShader.buildMetal(metal, this.label, sharedMemory(unit.text()),
 						MODULE_CACHE_STAGE, Pass::compileSpirv);
 			} catch (GpuDeviceLossException e) {
 				throw e;
@@ -831,37 +748,21 @@ final class PackCompute implements AutoCloseable {
 				return;
 			}
 
-			if (compiled == null) {
+			if (built == null) {
 				return;
 			}
 
-			this.shaderModule = compiled.module();
-			this.entries = compiled.entries();
-			// Named and still dispatched, which is what the graphics path does with the same
-			// ceiling: a device is only obliged to allow this many descriptors in one pushed set,
-			// and going past it is undefined rather than slow. Said here, once, so that a driver
-			// error later has a line in the log that predicted it.
-			if (this.entries.size() > PUSH_DESCRIPTORS) {
-				Vitrail.logger().warn("compute {} pushes {} descriptors in one set, "
-						+ "past the {} a device commonly allows at once", this.path,
-						this.entries.size(), PUSH_DESCRIPTORS);
+			this.kernel = built.kernel();
+			this.entries = built.entries();
+			if (this.sharedBytes > 0L) {
+				GpuDevice device = RenderSystem.getDevice();
+				this.sharedBuffer = device.createBuffer(() -> "vitrail compute shared " + this.path,
+						GpuBuffer.USAGE_COPY_DST | GpuBuffer.USAGE_UNIFORM, this.sharedBytes);
 			}
 
-			try (MemoryStack stack = MemoryStack.stackPush()) {
-				createLayout(vulkan, stack);
-				createPipeline(vulkan, stack);
-				createSharedBuffer(vulkan, stack);
-			} catch (GpuDeviceLossException e) {
-				throw e;
-			} catch (RuntimeException e) {
-				destroy(vulkan);
-				Vitrail.logger().warn("compute {} pipeline failed: {}", this.path, e.toString());
-			}
-
-			if (this.pipeline != 0L) {
-				Vitrail.logger().info("Compiled compute {} ({})", this.path,
-						sizing(this.compute));
-			}
+			Vitrail.logger().info("Compiled compute {} for Metal ({}, {}x{}x{} threads to a group)",
+					this.path, sizing(this.compute), this.kernel.localX(), this.kernel.localY(),
+					this.kernel.localZ());
 		}
 
 		/**
@@ -1001,98 +902,9 @@ final class PackCompute implements AutoCloseable {
 			}
 		}
 
-		/**
-		 * The buffer a moved stage's shared variables live in, allocated the way the pack's own
-		 * storage buffers are. Left unfilled: a shared variable starts undefined.
-		 */
-		private void createSharedBuffer(VulkanDevice vulkan, MemoryStack stack) {
-			if (this.sharedBytes <= 0L) {
-				return;
-			}
-
-			VkBufferCreateInfo bufferInfo = VkBufferCreateInfo.calloc(stack).sType$Default();
-			bufferInfo.size(this.sharedBytes);
-			bufferInfo.usage(VK12.VK_BUFFER_USAGE_STORAGE_BUFFER_BIT);
-			bufferInfo.sharingMode(VK12.VK_SHARING_MODE_EXCLUSIVE);
-			VmaAllocationCreateInfo allocationInfo = VmaAllocationCreateInfo.calloc(stack);
-			allocationInfo.usage(8);
-			LongBuffer bufferPtr = stack.callocLong(1);
-			PointerBuffer allocationPtr = stack.callocPointer(1);
-			VulkanUtils.crashIfFailure(vulkan,
-					Vma.vmaCreateBuffer(vulkan.vma(), bufferInfo, allocationInfo, bufferPtr,
-							allocationPtr, null),
-					"compute shared memory");
-			this.sharedBuffer = bufferPtr.get(0);
-			this.sharedAllocation = allocationPtr.get(0);
-		}
-
 		/** Whether that entry is the block the shared variables were moved into. */
 		private boolean servesShared(String name) {
 			return this.sharedBytes > 0L && SharedMemory.BLOCK.equals(name);
-		}
-
-		private void createLayout(VulkanDevice vulkan, MemoryStack stack) {
-			int count = Math.max(1, this.entries.size());
-			VkDescriptorSetLayoutBinding.Buffer bindings =
-					VkDescriptorSetLayoutBinding.calloc(this.entries.isEmpty() ? 0 : count, stack);
-			for (int i = 0; i < this.entries.size(); i++) {
-				ComputeShader.Binding entry = this.entries.get(i);
-				boolean storage = CustomImages.storage(entry.name())
-						|| StorageImages.storageBinding(entry.name())
-						|| COLOUR_IMAGE.matcher(entry.name()).matches();
-				int type;
-				if (entry.buffer()) {
-					type = StorageBuffers.named(entry.name()) || servesShared(entry.name())
-							? VK12.VK_DESCRIPTOR_TYPE_STORAGE_BUFFER
-							: VK12.VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
-				} else {
-					type = storage
-							? VK12.VK_DESCRIPTOR_TYPE_STORAGE_IMAGE
-							: VK12.VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-				}
-				bindings.get(i).binding(i).descriptorType(type).descriptorCount(1)
-						.stageFlags(VK12.VK_SHADER_STAGE_COMPUTE_BIT);
-			}
-
-			VkDescriptorSetLayoutCreateInfo layoutInfo = VkDescriptorSetLayoutCreateInfo.calloc(stack)
-					.sType$Default()
-					.flags(1)
-					.pBindings(bindings);
-			this.allocatedSets = WideSamplerSets.dropPush(layoutInfo, this.label);
-			LongBuffer layoutPtr = stack.callocLong(1);
-			VulkanUtils.crashIfFailure(vulkan,
-					VK12.vkCreateDescriptorSetLayout(vulkan.vkDevice(), layoutInfo, null, layoutPtr),
-					"compute set layout");
-			this.setLayout = layoutPtr.get(0);
-			LongBuffer setLayouts = stack.callocLong(1).put(0, this.setLayout);
-			VkPipelineLayoutCreateInfo pipelineLayoutInfo = VkPipelineLayoutCreateInfo.calloc(stack)
-					.sType$Default()
-					.pSetLayouts(setLayouts);
-			LongBuffer pipelineLayoutPtr = stack.callocLong(1);
-			VulkanUtils.crashIfFailure(vulkan,
-					VK12.vkCreatePipelineLayout(vulkan.vkDevice(), pipelineLayoutInfo, null,
-							pipelineLayoutPtr),
-					"compute pipeline layout");
-			this.pipelineLayout = pipelineLayoutPtr.get(0);
-		}
-
-		private void createPipeline(VulkanDevice vulkan, MemoryStack stack) {
-			VkPipelineShaderStageCreateInfo stage = VkPipelineShaderStageCreateInfo.calloc(stack)
-					.sType$Default();
-			stage.stage(VK12.VK_SHADER_STAGE_COMPUTE_BIT);
-			stage.module(this.shaderModule);
-			stage.pName(stack.UTF8("main"));
-			VkComputePipelineCreateInfo pipelineInfo = VkComputePipelineCreateInfo.calloc(stack)
-					.sType$Default();
-			pipelineInfo.stage(stage);
-			pipelineInfo.layout(this.pipelineLayout);
-			VkComputePipelineCreateInfo.Buffer infos = VkComputePipelineCreateInfo.calloc(1, stack);
-			infos.put(0, pipelineInfo);
-			LongBuffer pipelinePtr = stack.callocLong(1);
-			VulkanUtils.crashIfFailure(vulkan,
-					VK12.vkCreateComputePipelines(vulkan.vkDevice(), 0L, infos, null, pipelinePtr),
-					"compute pipeline");
-			this.pipeline = pipelinePtr.get(0);
 		}
 
 		private void writeBlock(PackValues values) {
@@ -1109,206 +921,81 @@ final class PackCompute implements AutoCloseable {
 			}
 		}
 
-		private void pushDescriptors(VulkanCommandEncoder recorder, VkCommandBuffer commands,
-				MemoryStack stack, ColorTargets targets, TargetSchedule.Bound step,
-				GpuTextureView depth, GpuTextureView distant) {
-			if (this.entries.isEmpty()) {
-				return;
+		/** What one entry of the module reads or writes for this dispatch. */
+		private Bound resolve(ComputeShader.Binding entry, ColorTargets targets,
+				TargetSchedule.Bound step, GpuTextureView depth, GpuTextureView distant) {
+			SamplerPlan samplers = this.compute.loaded().samplers();
+			if (entry.buffer()) {
+				if (servesShared(entry.name()) && this.sharedBuffer != null) {
+					return Bound.buffer(this.sharedBuffer, 0L);
+				}
+
+				if (StorageBuffers.named(entry.name())) {
+					throw new IllegalStateException("storage buffer " + entry.name()
+							+ " is not served on Metal yet");
+				}
+
+				GpuBufferSlice slice = this.block.currentBuffer().slice(0, Math.max(16, this.uniforms.size()));
+				return Bound.buffer(slice.buffer(), slice.offset());
 			}
 
-			VkWriteDescriptorSet.Buffer writes = VkWriteDescriptorSet.calloc(this.entries.size(), stack);
-			for (int i = 0; i < this.entries.size(); i++) {
-				ComputeShader.Binding entry = this.entries.get(i);
-				VkWriteDescriptorSet write = writes.get(i).sType$Default();
-				write.dstBinding(i);
-				write.dstArrayElement(0);
-				write.descriptorCount(1);
-				if (entry.buffer()) {
-					if (servesShared(entry.name())) {
-						VkDescriptorBufferInfo.Buffer bufferInfo = VkDescriptorBufferInfo.calloc(1, stack);
-						bufferInfo.buffer(this.sharedBuffer);
-						bufferInfo.offset(0L);
-						bufferInfo.range(this.sharedBytes);
-						write.descriptorType(VK12.VK_DESCRIPTOR_TYPE_STORAGE_BUFFER);
-						write.pBufferInfo(bufferInfo);
-						continue;
-					}
-
-					if (StorageBuffers.named(entry.name())) {
-						StorageBuffers.Bound bound = StorageBuffers.bound(entry.name());
-						if (bound == null) {
-							throw new IllegalStateException("Missing storage buffer " + entry.name());
-						}
-
-						VkDescriptorBufferInfo.Buffer bufferInfo = VkDescriptorBufferInfo.calloc(1, stack);
-						bufferInfo.buffer(bound.buffer());
-						bufferInfo.offset(0L);
-						bufferInfo.range(bound.range());
-						write.descriptorType(VK12.VK_DESCRIPTOR_TYPE_STORAGE_BUFFER);
-						write.pBufferInfo(bufferInfo);
-						continue;
-					}
-
-					int bytes = Math.max(16, this.uniforms.size());
-					GpuBufferSlice slice = this.block.currentBuffer().slice(0, bytes);
-					VkDescriptorBufferInfo.Buffer bufferInfo = VkDescriptorBufferInfo.calloc(1, stack);
-					bufferInfo.buffer(((VulkanGpuBuffer) slice.buffer()).vkBuffer());
-					bufferInfo.offset(slice.offset());
-					bufferInfo.range(slice.length());
-					write.descriptorType(VK12.VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER);
-					write.pBufferInfo(bufferInfo);
-					continue;
-				}
-
-				StorageImages.Bound bound = StorageImages.bound(entry.name());
-				VkDescriptorImageInfo.Buffer imageInfo = VkDescriptorImageInfo.calloc(1, stack);
-
-				// A texture the pack ships answers here exactly as it answers a full screen pass:
-				// which image, how it is filtered and how it is addressed outside zero to one are
-				// all the pack's to say, in one directive and the .mcmeta beside the file. Asked
-				// BEFORE the colour targets for the reason PackPass asks it first as well: a pack
-				// may lay a lookup table over the name of a real target for one stage, and reading
-				// the name first would hand the compute a copy of the scene as a lookup table.
-				ColorTargets.PackBinding supplied = bound == null
-						? targets.packTexture(this.textureStage, entry.name())
-						: null;
-				if (supplied != null && supplied.view() instanceof VulkanGpuTextureView served) {
-					imageInfo.sampler(((VulkanGpuSampler) PackPass.sampler(supplied.repeat(),
-							supplied.filter(), supplied.mipmaps())).vkSampler());
-					imageInfo.imageView(served.vkImageView());
-					imageInfo.imageLayout(VK12.VK_IMAGE_LAYOUT_GENERAL);
-					write.descriptorType(VK12.VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER);
-					write.pImageInfo(imageInfo);
-					continue;
-				}
-
-				// A name the pack took over for a texture nothing could be put behind. The pass
-				// beside this compute reads one black texel for it (PackPass.java:672), so the compute
-				// reads the same rather than the colour target of that name or a throw that takes it
-				// out of the frame. A file the pack does not ship and a picture refused at its header
-				// never land here: PackTextures hands their name back, as Iris does, and the colour
-				// target lookup below answers it like any other.
-				SamplerPlan.Binding taken = this.compute.loaded().samplers().binding(entry.name());
-				if (bound == null && taken.kind() == SamplerPlan.Kind.PACK_TEXTURE && !taken.defaulted()
-						&& targets.black() instanceof VulkanGpuTextureView blank) {
-					imageInfo.sampler(samplerFor(targets, this.compute.loaded().samplers(), entry.name()));
-					imageInfo.imageView(blank.vkImageView());
-					imageInfo.imageLayout(VK12.VK_IMAGE_LAYOUT_GENERAL);
-					write.descriptorType(VK12.VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER);
-					write.pImageInfo(imageInfo);
-					continue;
-				}
-
-				if (bound == null && step != null && colourTarget(write, imageInfo, entry.name(), targets,
-						this.compute.loaded().samplers(), step, this.program)) {
-					continue;
-				}
-
-				if (bound == null) {
-					// The depth of the pass this compute hangs off, under the three names, the far
-					// terrain's and the smoothed centre depth, answered by the methods that answer
-					// the pass itself: Iris gives a compute the depth samplers of its pass
-					// (CompositeRenderer.java:462 and :470), and Reverie's cloud compute reads
-					// depthtex1 to know where the sky ends. Ahead of the engine set below because
-					// that set carries no depth, and a name it did not carry threw on every
-					// dispatch, so the compute never ran and said so once.
-					GpuTextureView read = switch (SamplerPlan.classify(entry.name())) {
-						case DEPTH -> PackPass.depth(entry.name(), targets, depth);
-						case DISTANT_DEPTH -> PackPass.distant(entry.name(), targets, distant);
-						case CENTER_DEPTH -> PackPass.centerDepth(targets);
-						default -> null;
-					};
-					if (read instanceof VulkanGpuTextureView served) {
-						imageInfo.sampler(samplerFor(targets, this.compute.loaded().samplers(), entry.name()));
-						imageInfo.imageView(served.vkImageView());
-						imageInfo.imageLayout(VK12.VK_IMAGE_LAYOUT_GENERAL);
-						write.descriptorType(VK12.VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER);
-						write.pImageInfo(imageInfo);
-						continue;
-					}
-
-					// The samplers the engine serves every pack program, noisetex and the shadow
-					// set among them: shadowcomp reads them the way a composite does, and only a
-					// name neither the pack's images nor this set carries is a real miss.
-					if (engineView(targets, entry.name()) instanceof VulkanGpuTextureView served) {
-						imageInfo.sampler(samplerFor(targets, this.compute.loaded().samplers(), entry.name()));
-						imageInfo.imageView(served.vkImageView());
-						imageInfo.imageLayout(VK12.VK_IMAGE_LAYOUT_GENERAL);
-						write.descriptorType(VK12.VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER);
-						write.pImageInfo(imageInfo);
-						continue;
-					}
-
-					// And last, the default sampler of the family this compute hangs off. Iris
-					// builds a compute of a stage with the same call and the same full screen flag
-					// as the passes of that stage (CompositeRenderer.java:454 beside :398), so a
-					// name that reads the screen in composite1.fsh reads it in composite1_a.csh as
-					// well, and a rule posed on one and not the other kills the compute over a
-					// declaration the pass takes in its stride. The plan already worked out what
-					// colortex0 is for this program, standing overrides and all; a shadow compute
-					// has no such default and its plan carries none.
-					SamplerPlan.Binding byDefault =
-							this.compute.loaded().samplers().binding(entry.name());
-					if (byDefault.defaulted()) {
-						String screen = TargetName.canonical(SamplerPlan.DEFAULT_TARGET);
-						// The colour target needs the step, its half being the pass's; the file the
-						// pack lays over the target does not, being one image whichever half the
-						// compute is dispatched on, so the second road is not held behind the first
-						// one's condition.
-						if (byDefault.kind() == SamplerPlan.Kind.COLORTEX && step != null
-								&& colourTarget(write, imageInfo, screen, targets,
-										this.compute.loaded().samplers(), step, this.program)) {
-							continue;
-						}
-
-						ColorTargets.PackBinding laid = targets.packTexture(this.textureStage, screen);
-						if (laid != null && laid.view() instanceof VulkanGpuTextureView served) {
-							imageInfo.sampler(((VulkanGpuSampler) PackPass.sampler(laid.repeat(),
-									laid.filter(), laid.mipmaps())).vkSampler());
-							imageInfo.imageView(served.vkImageView());
-							imageInfo.imageLayout(VK12.VK_IMAGE_LAYOUT_GENERAL);
-							write.descriptorType(VK12.VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER);
-							write.pImageInfo(imageInfo);
-							continue;
-						}
-
-						// And one black texel where the default resolved to nothing, which is what
-						// the pass beside this compute binds for the very same name
-						// (PackPass.java:724). The pass draws on black there; taking the compute
-						// out of the frame instead would be this engine answering one declaration
-						// two ways.
-						if (targets.black() instanceof VulkanGpuTextureView blank) {
-							imageInfo.sampler(samplerFor(targets, this.compute.loaded().samplers(), entry.name()));
-							imageInfo.imageView(blank.vkImageView());
-							imageInfo.imageLayout(VK12.VK_IMAGE_LAYOUT_GENERAL);
-							write.descriptorType(VK12.VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER);
-							write.pImageInfo(imageInfo);
-							continue;
-						}
-					}
-
-					throw new IllegalStateException("Missing storage image " + entry.name());
-				}
-
-				boolean storage = bound.storage();
-				imageInfo.sampler(storage ? 0L
-						: samplerFor(targets, this.compute.loaded().samplers(), entry.name()));
-				imageInfo.imageView(bound.view());
-				imageInfo.imageLayout(VK12.VK_IMAGE_LAYOUT_GENERAL);
-				write.descriptorType(storage
-						? VK12.VK_DESCRIPTOR_TYPE_STORAGE_IMAGE
-						: VK12.VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER);
-				write.pImageInfo(imageInfo);
+			if (CustomImages.storage(entry.name()) || StorageImages.storageBinding(entry.name())) {
+				throw new IllegalStateException("image " + entry.name() + " is not served on Metal yet");
 			}
 
-			if (this.allocatedSets) {
-				WideSamplerSets.bind(recorder, commands, VK12.VK_PIPELINE_BIND_POINT_COMPUTE,
-						this.pipelineLayout, 0, this.setLayout, writes);
-				return;
+			ColorTargets.PackBinding supplied = targets.packTexture(this.textureStage, entry.name());
+			if (supplied != null && supplied.view() != null) {
+				return Bound.texture(supplied.view(),
+						PackPass.sampler(supplied.repeat(), supplied.filter(), supplied.mipmaps()));
 			}
 
-			KHRPushDescriptor.vkCmdPushDescriptorSetKHR(commands,
-					VK12.VK_PIPELINE_BIND_POINT_COMPUTE, this.pipelineLayout, 0, writes);
+			SamplerPlan.Binding taken = samplers.binding(entry.name());
+			if (taken.kind() == SamplerPlan.Kind.PACK_TEXTURE && !taken.defaulted()
+					&& targets.black() != null) {
+				return Bound.texture(targets.black(), samplerFor(targets, samplers, entry.name()));
+			}
+
+			if (step != null) {
+				Bound colour = colourTarget(entry.name(), targets, samplers, step, this.program);
+				if (colour != null) {
+					return colour;
+				}
+			}
+
+			GpuTextureView read = switch (SamplerPlan.classify(entry.name())) {
+				case DEPTH -> PackPass.depth(entry.name(), targets, depth);
+				case DISTANT_DEPTH -> PackPass.distant(entry.name(), targets, distant);
+				case CENTER_DEPTH -> PackPass.centerDepth(targets);
+				default -> null;
+			};
+			if (read == null) {
+				read = engineView(targets, entry.name());
+			}
+			if (read != null) {
+				return Bound.texture(read, samplerFor(targets, samplers, entry.name()));
+			}
+
+			if (taken.defaulted()) {
+				String screen = TargetName.canonical(SamplerPlan.DEFAULT_TARGET);
+				if (taken.kind() == SamplerPlan.Kind.COLORTEX && step != null) {
+					Bound colour = colourTarget(screen, targets, samplers, step, this.program);
+					if (colour != null) {
+						return colour;
+					}
+				}
+
+				ColorTargets.PackBinding laid = targets.packTexture(this.textureStage, screen);
+				if (laid != null && laid.view() != null) {
+					return Bound.texture(laid.view(),
+							PackPass.sampler(laid.repeat(), laid.filter(), laid.mipmaps()));
+				}
+
+				if (targets.black() != null) {
+					return Bound.texture(targets.black(), samplerFor(targets, samplers, entry.name()));
+				}
+			}
+
+			throw new IllegalStateException("Missing image " + entry.name());
 		}
 
 		/**
@@ -1317,118 +1004,57 @@ final class PackCompute implements AutoCloseable {
 		 * ({@code IrisSamplers.addRenderTargetSamplers}, {@code IrisImages.addRenderTargetImages}),
 		 * so a compute stores into the very half the pass after it will sample.
 		 *
-		 * @param program the pass this compute hangs off, whose lod reads say whether the target
-		 *                is sampled through its chain
-		 * @return whether the name was one, and the write filled
+		 * @return what the name binds, or null where it is not a colour target
 		 */
-		private static boolean colourTarget(VkWriteDescriptorSet write,
-				VkDescriptorImageInfo.Buffer imageInfo, String name, ColorTargets targets,
+		private static @Nullable Bound colourTarget(String name, ColorTargets targets,
 				SamplerPlan samplers, TargetSchedule.Bound step, String program) {
 			Matcher image = COLOUR_IMAGE.matcher(name);
 			if (image.matches()) {
 				int index = Integer.parseInt(image.group(1));
 				TargetSurface surface = targets.surface(index, step.read(index));
-				if (surface == null || !surface.storage()
-						|| !(surface.storageView() instanceof VulkanGpuTextureView view)) {
+				if (surface == null || !surface.storage() || surface.storageView() == null) {
 					throw new IllegalStateException(name + " is not a target created writable from "
 							+ "a compute");
 				}
 
-				imageInfo.sampler(0L);
-				imageInfo.imageView(view.vkImageView());
-				imageInfo.imageLayout(VK12.VK_IMAGE_LAYOUT_GENERAL);
-				write.descriptorType(VK12.VK_DESCRIPTOR_TYPE_STORAGE_IMAGE);
-				write.pImageInfo(imageInfo);
-				return true;
+				return Bound.texture(surface.storageView(), null);
 			}
 
 			OptionalInt index = TargetName.index(name);
 			if (index.isEmpty()) {
-				return false;
+				return null;
 			}
 
 			TargetSurface surface = targets.surface(index.getAsInt(), step.read(index.getAsInt()));
-
-			// One black texel for a target this place never allocated, which is the answer a full
-			// screen pass gives the same name (PackPass.java:724). Throwing here took the whole
-			// compute out of the frame over a declaration the pass beside it draws with.
-			if (surface == null || !(surface.view() instanceof VulkanGpuTextureView view)) {
-				if (!(targets.black() instanceof VulkanGpuTextureView blank)) {
-					return false;
-				}
-
-				imageInfo.sampler(samplerFor(targets, samplers, name));
-				imageInfo.imageView(blank.vkImageView());
-				imageInfo.imageLayout(VK12.VK_IMAGE_LAYOUT_GENERAL);
-				write.descriptorType(VK12.VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER);
-				write.pImageInfo(imageInfo);
-				return true;
+			if (surface == null || surface.view() == null) {
+				return targets.black() == null ? null
+						: Bound.texture(targets.black(), samplerFor(targets, samplers, name));
 			}
 
-			// Clamped, filtered and mipmapped the way the pass this hangs off binds the same
-			// target: the pack's own indexing stays inside the image, an integer format takes no
-			// filtering, and the chain is only in reach once something has written it and the
-			// pass reads the target at a lod. Iris has one texture with one set of parameters
-			// for both, so a compute and its pass sample it the same way.
 			boolean mipmaps = surface.chainWritten()
 					&& targets.lodReads(program).contains(index.getAsInt());
-			imageInfo.sampler(((VulkanGpuSampler) PackPass.sampler(false,
-					targets.filter(index.getAsInt()), mipmaps)).vkSampler());
-			imageInfo.imageView(view.vkImageView());
-			imageInfo.imageLayout(VK12.VK_IMAGE_LAYOUT_GENERAL);
-			write.descriptorType(VK12.VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER);
-			write.pImageInfo(imageInfo);
-			return true;
+			return Bound.texture(surface.view(),
+					PackPass.sampler(false, targets.filter(index.getAsInt()), mipmaps));
 		}
 
 		private void close() {
-			GpuDevice device = RenderSystem.tryGetDevice();
-			VulkanDevice vulkan = device == null ? null : vulkan(device);
-			if (vulkan != null) {
-				destroy(vulkan);
-			}
+			MetalKernel kernel = this.kernel;
+			GpuBuffer shared = this.sharedBuffer;
+			this.kernel = null;
+			this.sharedBuffer = null;
+			GpuRecording.destroyLater(() -> {
+				if (kernel != null) {
+					kernel.release();
+				}
+				if (shared != null) {
+					shared.close();
+				}
+			});
 
 			if (this.block != null) {
 				GpuRecording.destroyLater(this.block::close);
 				this.block = null;
 			}
-		}
-
-		/** Deferred like every destruction of this engine's: two frames are still in flight. */
-		private void destroy(VulkanDevice vulkan) {
-			long pipeline = this.pipeline;
-			long pipelineLayout = this.pipelineLayout;
-			long setLayout = this.setLayout;
-			long shaderModule = this.shaderModule;
-			long sharedBuffer = this.sharedBuffer;
-			long sharedAllocation = this.sharedAllocation;
-			this.pipeline = 0L;
-			this.pipelineLayout = 0L;
-			this.setLayout = 0L;
-			this.shaderModule = 0L;
-			this.sharedBuffer = 0L;
-			this.sharedAllocation = 0L;
-			GpuRecording.destroyLater(() -> {
-				if (sharedBuffer != 0L) {
-					Vma.vmaDestroyBuffer(vulkan.vma(), sharedBuffer, sharedAllocation);
-				}
-
-				if (pipeline != 0L) {
-					VK12.vkDestroyPipeline(vulkan.vkDevice(), pipeline, null);
-				}
-
-				if (pipelineLayout != 0L) {
-					VK12.vkDestroyPipelineLayout(vulkan.vkDevice(), pipelineLayout, null);
-				}
-
-				if (setLayout != 0L) {
-					VK12.vkDestroyDescriptorSetLayout(vulkan.vkDevice(), setLayout, null);
-				}
-
-				if (shaderModule != 0L) {
-					VK12.vkDestroyShaderModule(vulkan.vkDevice(), shaderModule, null);
-				}
-			});
 		}
 	}
 }

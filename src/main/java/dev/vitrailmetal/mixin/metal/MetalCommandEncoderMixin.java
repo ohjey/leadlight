@@ -12,6 +12,7 @@ import com.mojang.blaze3d.systems.RenderPassDescriptor;
 import com.mojang.blaze3d.textures.GpuTexture;
 import com.mojang.blaze3d.textures.GpuTextureView;
 import dev.vitrailmetal.Vitrail;
+import dev.vitrailmetal.metal.MetalEncoderAccess;
 import dev.vitrailmetal.metal.MultiTarget;
 import org.joml.Vector4fc;
 import org.jspecify.annotations.Nullable;
@@ -38,7 +39,7 @@ import java.util.Optional;
  * encoder that has them, and a multiple target pass carries on only in one with the same set.
  */
 @Mixin(targets = "com.metallum.render.MetalCommandEncoder", remap = false)
-public abstract class MetalCommandEncoderMixin implements MultiTarget.Encoder {
+public abstract class MetalCommandEncoderMixin implements MultiTarget.Encoder, MetalEncoderAccess {
 
 	@Shadow
 	private MTLCommandEncoder currentEncoder;
@@ -192,5 +193,20 @@ public abstract class MetalCommandEncoderMixin implements MultiTarget.Encoder {
 	@Unique
 	private static boolean same(MemorySegment a, MemorySegment b) {
 		return a.address() == b.address();
+	}
+
+	@Override
+	public MTLFence vitrail$fence() {
+		return this.fence;
+	}
+
+	@Override
+	public MTLCommandBuffer vitrail$commandBuffer() {
+		return this.commandBuffer();
+	}
+
+	@Override
+	public void vitrail$endEncoder() {
+		this.endEncoder();
 	}
 }

@@ -143,6 +143,9 @@ final class GpuFormats {
 	/** One bit of what this device does with that format, or {@code absent} with no device to ask. */
 	private static boolean feature(GpuFormat format, int bit, boolean absent) {
 		GpuDevice device = RenderSystem.tryGetDevice();
+		if (device != null && dev.vitrailmetal.metal.MetalHost.isMetal(device)) {
+			return dev.vitrailmetal.metal.MetalHost.formatFeature(format, bit);
+		}
 		if (device == null
 				|| !(((GpuDeviceAccessor) device).vitrail$backend() instanceof VulkanDevice vulkan)) {
 			return absent;
