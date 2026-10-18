@@ -49,6 +49,10 @@ Everything the engine did through Vulkan is done through Metal here:
 - **Colour targets a compute writes** (`colorimgN`) are created shader-writable.
 - **Mip chains** are filled with Metal's blit `generateMipmaps`.
 - **Hardware shadow comparison** uses a Metal comparison sampler.
+- **Distant Horizons** is told Metal is not OpenGL. It names only Vulkan and OpenGL, and on Metal
+  took the OpenGL road, whose lightmap hook casts the game's texture to an OpenGL one and stopped the
+  game at the loading screen; it now draws through Blaze3D as it does under Vitrail on Vulkan, and
+  its far terrain reaches the pack.
 - **Entity pipelines** are evicted from Metallum's cache when the pack's vertex layout changes, and
   the live pack's pipelines are kept across resource reloads, as Vitrail does with Vulkan's.
 
@@ -88,7 +92,6 @@ These were bugs in Vitrail on Vulkan as well, fixed here:
 
 - **Geometry shaders.** Metal has no geometry stage. As on a Vulkan device without one, a geometry
   stage that only passes vertices through is folded away and any other program is refused.
-- **Distant Horizons** has not been tested on this fork.
 - **Background shader compilation.** Vitrail compiles the families a pack draws later (entities,
   particles, ...) ahead of time on Vulkan only; here they compile on their first draw, which can
   cost a short hitch the first time each appears.
@@ -101,7 +104,7 @@ coloured lights), Complementary Reimagined r5.9.3 (default and with coloured lig
 Sildur's Vibrant 2.02 Extreme, Solas 3.7b, Noble 1.9.9, Bliss 2.1.2 and MakeUp UltraFast 9.5g, in
 the Overworld, Nether and End, day and night, on a recent JDK and on the Modrinth launcher's Zulu 25;
 Photon and BSL with Entity Texture Features 7.2.6, Entity Model Features 3.3.12 and Fresh Animations
-1.10.5 with its Extensions and Player packs.
+1.10.5 with its Extensions and Player packs; Photon with Distant Horizons 3.3.3.
 
 ## Building
 

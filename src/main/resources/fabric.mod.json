@@ -24,7 +24,8 @@
 	"mixins": [
 		"vitrail-metallum.mixins.json",
 		"vitrail-metallum-game.mixins.json",
-		"vitrail-metallum-fabric.mixins.json"
+		"vitrail-metallum-fabric.mixins.json",
+		"vitrail-metallum-dh.mixins.json"
 	],
 	"depends": {
 		"fabricloader": ">=${fabric_loader_min_version}",

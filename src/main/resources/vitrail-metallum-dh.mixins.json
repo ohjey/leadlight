@@ -1,0 +1,12 @@
+{
+	"required": false,
+	"minVersion": "0.8.5",
+	"package": "dev.vitrailmetal.mixin.dh",
+	"compatibilityLevel": "JAVA_21",
+	"injectors": {
+		"defaultRequire": 0
+	},
+	"client": [
+		"DhRenderingApiMixin"
+	]
+}
