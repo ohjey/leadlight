@@ -3035,10 +3035,17 @@ public final class GlslTranslator {
 	private void convertDepth() {
 		List<Closing> closings = new ArrayList<>();
 		int[] lines = this.tokens.lineNumbers();
+		boolean fragDepthRead = this.stage == ProgramStage.FRAGMENT && fragDepthOnlyRead();
 
 		for (int index = 0; index < this.tokens.size(); index++) {
 			Token token = this.tokens.get(index);
 			if (token.kind() != Kind.IDENTIFIER) {
+				continue;
+			}
+
+			if (fragDepthRead && token.identifier("gl_FragDepth")) {
+				this.tokens.inject(index, "(" + DEPTH_CONV + ".z * gl_FragCoord.z + " + DEPTH_CONV + ".w)");
+				takeDepthConv();
 				continue;
 			}
 
@@ -3714,6 +3721,81 @@ public final class GlslTranslator {
 		this.tokens.blank(dot);
 		this.tokens.blank(swizzle);
 		takeDepthConv();
+	}
+
+	/**
+	 * Whether the fragment stage names {@code gl_FragDepth} and never writes it, Noble's forward
+	 * stage handing it to its shadow lookup as an {@code in} parameter
+	 * ({@code programs/gbuffers/forward.glsl:170}).
+	 * <p>
+	 * GL takes the depth from the shader only where the shader statically assigns the builtin, so
+	 * such a stage draws at the interpolated depth there. The SPIR-V road makes the builtin an output
+	 * as soon as it is named, and the fragment then writes whatever the unwritten output holds:
+	 * Metal fails every one of them against the depth test, and Noble's water is not drawn at all.
+	 * Such a stage reads {@code gl_FragCoord.z} in its place, which is the value GL would have
+	 * written and in the window the pack reads depths in.
+	 * <p>
+	 * Any write rules it out: a plain or compound assignment, an increment, or a redeclaration.
+	 */
+	private boolean fragDepthOnlyRead() {
+		boolean named = false;
+		for (int index = 0; index < this.tokens.size(); index++) {
+			if (!this.tokens.get(index).identifier("gl_FragDepth")) {
+				continue;
+			}
+
+			named = true;
+			if (writesAt(index)) {
+				return false;
+			}
+		}
+
+		return named;
+	}
+
+	private boolean writesAt(int index) {
+		int before = this.tokens.significantBefore(index);
+		if (before >= 0) {
+			Token previous = this.tokens.get(before);
+			if (previous.identifier("float")
+					|| (previous.operator("+") || previous.operator("-")) && before > 0
+							&& sameOperatorBefore(before, previous.text())) {
+				return true;
+			}
+		}
+
+		int after = this.tokens.significantAfter(index);
+		if (after < 0) {
+			return false;
+		}
+
+		Token next = this.tokens.get(after);
+		int second = this.tokens.significantAfter(after);
+		boolean thenEquals = second >= 0 && this.tokens.get(second).operator("=");
+		if (next.operator("=")) {
+			return !thenEquals;
+		}
+
+		for (String symbol : new String[] {"+", "-", "*", "/", "%", "&", "|", "^"}) {
+			if (next.operator(symbol) && (thenEquals
+					|| second >= 0 && this.tokens.get(second).operator(symbol)
+							&& (symbol.equals("+") || symbol.equals("-")))) {
+				return true;
+			}
+		}
+
+		if ((next.operator("<") || next.operator(">")) && second >= 0
+				&& this.tokens.get(second).operator(next.text())) {
+			int third = this.tokens.significantAfter(second);
+			return third >= 0 && this.tokens.get(third).operator("=");
+		}
+
+		return false;
+	}
+
+	private boolean sameOperatorBefore(int index, String symbol) {
+		int before = this.tokens.significantBefore(index);
+		return before >= 0 && this.tokens.get(before).operator(symbol);
 	}
 
 	/** Whether a swizzle reaches the third component, under any of the three sets of names. */

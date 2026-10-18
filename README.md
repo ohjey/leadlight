@@ -79,6 +79,11 @@ These were bugs in Vitrail on Vulkan as well, fixed here:
   they are drawn over, and the shaders are compiled with Metal's `preserveInvariance`, so the overlay
   and the body land on the same depth.
 
+- **Invisible water with Noble.** Noble's water stage hands `gl_FragDepth` to its shadow lookup
+  without ever writing it. OpenGL leaves the depth alone in that case, but once compiled to SPIR-V
+  the builtin is an output and the unwritten value failed the depth test, so no water was drawn. A
+  stage that reads `gl_FragDepth` and never writes it now reads `gl_FragCoord.z` instead.
+
 ## Not supported (yet)
 
 - **Geometry shaders.** Metal has no geometry stage. As on a Vulkan device without one, a geometry
