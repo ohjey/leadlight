@@ -41,6 +41,13 @@ public abstract class ClientSetupMixin {
 
 	@Inject(method = "onGameLoadFinished", at = @At("HEAD"), require = 1)
 	private void vitrail$clientSetup(CallbackInfo ci) {
-		EngineStages.clientSetup();
+		try {
+			EngineStages.clientSetup();
+		} catch (RuntimeException | Error e) {
+			// The game runs this inside a future nobody reads, so a throw here is swallowed whole
+			// and leaves the loading screen up for good, with nothing in the log to say why.
+			dev.vitrailmetal.Vitrail.logger().error("Client setup failed", e);
+			throw e;
+		}
 	}
 }

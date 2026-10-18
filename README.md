@@ -88,6 +88,13 @@ These were bugs in Vitrail on Vulkan as well, fixed here:
   the builtin is an output and the unwritten value failed the depth test, so no water was drawn. A
   stage that reads `gl_FragDepth` and never writes it now reads `gl_FragCoord.z` instead.
 
+- **Stuck on the Mojang screen with Continuity and a connected-textures pack** (Patrix). The normal
+  and specular atlases were uploaded one sprite and one mip level at a time; Metallum gives each
+  upload its own staging copy and blit encoder, and with Continuity's sprites that was tens of
+  thousands in one command buffer, which the GPU failed as out of memory, dropping every frame
+  after it. Each level is now laid out on the CPU and uploaded once. Failed Metal command buffers
+  are now logged, and so is a failure in the startup step Minecraft runs without reporting one.
+
 ## Not supported (yet)
 
 - **Geometry shaders.** Metal has no geometry stage. As on a Vulkan device without one, a geometry
@@ -104,7 +111,7 @@ coloured lights), Complementary Reimagined r5.9.3 (default and with coloured lig
 Sildur's Vibrant 2.02 Extreme, Solas 3.7b, Noble 1.9.9, Bliss 2.1.2 and MakeUp UltraFast 9.5g, in
 the Overworld, Nether and End, day and night, on a recent JDK and on the Modrinth launcher's Zulu 25;
 Photon and BSL with Entity Texture Features 7.2.6, Entity Model Features 3.3.12 and Fresh Animations
-1.10.5 with its Extensions and Player packs; Photon with Distant Horizons 3.3.3.
+1.10.5 with its Extensions and Player packs; Photon with Distant Horizons 3.3.3; Photon with Continuity 3.0.1 and Patrix 32x.
 
 ## Building
 

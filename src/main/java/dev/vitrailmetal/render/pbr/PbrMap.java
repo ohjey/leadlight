@@ -108,6 +108,11 @@ public enum PbrMap {
 	}
 
 	/** What a sprite the pack ships no map for reads, as a colour a clear can be given. */
+	/** The same value as one ARGB texel, which is what an image of the atlas is filled with. */
+	int missingArgb() {
+		return this.missing;
+	}
+
 	public Vector4fc missing() {
 		return new Vector4f(ARGB.red(this.missing) / 255.0F, ARGB.green(this.missing) / 255.0F,
 				ARGB.blue(this.missing) / 255.0F, ARGB.alpha(this.missing) / 255.0F);

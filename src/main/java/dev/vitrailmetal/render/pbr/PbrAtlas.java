@@ -150,16 +150,24 @@ final class PbrAtlas implements AutoCloseable {
 			this.views.put(map, device.createTextureView(texture));
 
 			CommandEncoder encoder = device.createCommandEncoder();
-			// Every level of the chain and not only the base: the backend's clear takes a level count
-			// of the whole texture, VulkanCommandEncoder:350-359. This is what a sprite with no map
-			// of its own reads, and it has to reach the levels too, since a chain whose tail was
-			// never written holds whatever the driver left there rather than a coarser image.
-			encoder.clearColorTexture(texture, map.missing());
+			// One upload a level, each level laid out here first, and not one a sprite: Metallum
+			// stages every write and opens a blit encoder for it, and with a connected-textures pack
+			// (Continuity over Patrix, near ten thousand sprites with maps) that is tens of thousands
+			// of encoders in one command buffer, which the GPU fails as out of memory, and every frame
+			// after it is dropped. Every level and not only the base is filled with the missing value
+			// first, since that is what a sprite with no map of its own reads, all down its chain.
+			for (int level = 0; level < levels; level++) {
+				int levelWidth = Math.max(1, width >> level);
+				int levelHeight = Math.max(1, height >> level);
+				try (NativeImage canvas = new NativeImage(levelWidth, levelHeight, false)) {
+					canvas.fillRect(0, 0, levelWidth, levelHeight, map.missingArgb());
+					for (Sprite sprite : found) {
+						NativeImage image = sprite.levels()[level];
+						image.copyRect(canvas, 0, 0, sprite.x() >> level, sprite.y() >> level,
+								image.getWidth(), image.getHeight(), false, false);
+					}
 
-			for (Sprite sprite : found) {
-				for (int level = 0; level < levels; level++) {
-					encoder.writeToTexture(texture, sprite.levels()[level], level, 0,
-							sprite.x() >> level, sprite.y() >> level);
+					encoder.writeToTexture(texture, canvas, level, 0, 0, 0);
 				}
 			}
 

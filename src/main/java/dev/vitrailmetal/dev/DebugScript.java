@@ -41,6 +41,9 @@ public final class DebugScript {
 	/** Degrees the camera turns each tick, set by the turn step. */
 	private static float turning;
 
+	/** When the screen is next logged while no world is open. */
+	private static long screenLogAt;
+
 	/** The next step runs once the clock passes this. */
 	private static long resumeAt;
 
@@ -55,6 +58,16 @@ public final class DebugScript {
 
 		Minecraft minecraft = Minecraft.getInstance();
 		if (minecraft.level == null || minecraft.player == null) {
+			long now = System.currentTimeMillis();
+			if (now >= screenLogAt) {
+				screenLogAt = now + 5000;
+				Object screen = minecraft.gui.screen();
+				Object overlay = minecraft.gui.overlay();
+				Vitrail.logger().info("debug script: no world yet, screen {}, overlay {}",
+						screen == null ? "none" : screen.getClass().getName(),
+						overlay == null ? "none" : overlay.getClass().getName());
+			}
+
 			return;
 		}
 
