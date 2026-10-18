@@ -2,38 +2,40 @@
 	"schemaVersion": 1,
 	"id": "${mod_id}",
 	"version": "${mod_version}",
-	"name": "Vitrail",
-	"description": "OptiFine-format shader packs, on Minecraft's native Vulkan renderer",
+	"name": "Vitrail for Metallum",
+	"description": "OptiFine-format shader packs on Metallum's Metal renderer. A fork of Vitrail Shaders by avpbynf.",
 	"authors": [
-		"avpbynf"
+		"avpbynf (Vitrail)"
 	],
 	"contact": {
-		"homepage": "https://github.com/avpbynf/Vitrail-Shaders",
-		"sources": "https://github.com/avpbynf/Vitrail-Shaders",
-		"issues": "https://github.com/avpbynf/Vitrail-Shaders/issues"
+		"sources": "https://github.com/avpbynf/Vitrail-Shaders"
 	},
 	"license": "LGPL-3.0-only",
 	"icon": "vitrail.png",
 	"environment": "client",
 	"entrypoints": {
 		"client": [
-			"dev.vitrail.fabric.VitrailFabric"
+			"dev.vitrailmetal.fabric.VitrailFabric"
 		],
 		"sodium:config_api_user": [
-			"dev.vitrail.sodium.ConfigEntry"
+			"dev.vitrailmetal.sodium.ConfigEntry"
 		]
 	},
 	"mixins": [
-		"vitrail.mixins.json",
-		"vitrail-game.mixins.json",
-		"vitrail-fabric.mixins.json"
+		"vitrail-metallum.mixins.json",
+		"vitrail-metallum-game.mixins.json",
+		"vitrail-metallum-fabric.mixins.json"
 	],
 	"depends": {
 		"fabricloader": ">=${fabric_loader_min_version}",
 		"minecraft": ">=${minecraft_version} <${minecraft_next}",
+		"metallum": "${metallum_version}",
 		"sodium": "0.9.x",
 		"fabric-key-mapping-api-v1": "*",
 		"fabric-lifecycle-events-v1": "*"
+	},
+	"breaks": {
+		"vitrail": "*"
 	},
 	"custom": {
 		"sodium:options": {
