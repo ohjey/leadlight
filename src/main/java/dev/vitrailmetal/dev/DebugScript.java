@@ -27,6 +27,7 @@ import java.util.List;
  * view back          third person from behind (front, or first to go back)
  * hud off            hides the HUD (hud on shows it again)
  * fps                logs the frame rate the game counted over the last second
+ * screen packs       opens the pack screen, as the I key does (screen close closes it)
  * quit               closes the game
  * </pre>
  */
@@ -119,6 +120,9 @@ public final class DebugScript {
 					minecraft.gui.hud.toggle();
 				}
 			}
+			case "screen" -> minecraft.gui.setScreen(rest.equals("packs")
+					? dev.vitrailmetal.screen.PackScreens.open(minecraft.gui.screen())
+					: null);
 			case "fps" -> Vitrail.logger().info("debug script: {} fps", minecraft.getFps());
 			case "quit" -> minecraft.stop();
 			default -> Vitrail.logger().warn("debug script: unknown step {}", step);
