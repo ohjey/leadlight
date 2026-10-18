@@ -41,6 +41,7 @@ import dev.vitrailmetal.metal.MetalCompute;
 import dev.vitrailmetal.metal.MetalHost;
 import dev.vitrailmetal.metal.MetalKernel;
 import org.jspecify.annotations.Nullable;
+import java.lang.foreign.MemorySegment;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.renderer.MappableRingBuffer;
 import org.lwjgl.system.MemoryStack;
@@ -651,14 +652,19 @@ final class PackCompute implements AutoCloseable {
 
 		/** One resource resolved for a dispatch: a buffer, or a texture with or without a sampler. */
 		private record Bound(@Nullable GpuBuffer buffer, long offset, @Nullable GpuTextureView view,
-				@Nullable GpuSampler sampler) {
+				@Nullable MemorySegment raw, @Nullable GpuSampler sampler) {
 
 			static Bound buffer(GpuBuffer buffer, long offset) {
-				return new Bound(buffer, offset, null, null);
+				return new Bound(buffer, offset, null, null, null);
 			}
 
 			static Bound texture(GpuTextureView view, @Nullable GpuSampler sampler) {
-				return new Bound(null, 0L, view, sampler);
+				return new Bound(null, 0L, view, null, sampler);
+			}
+
+			/** A texture of the engine's own making, a pack's custom image. */
+			static Bound raw(MemorySegment texture, @Nullable GpuSampler sampler) {
+				return new Bound(null, 0L, null, texture, sampler);
 			}
 		}
 
@@ -708,7 +714,8 @@ final class PackCompute implements AutoCloseable {
 						continue;
 					}
 
-					pass.texture(VitrailMetalBridge.nativeHandle(one.view()), slot.index());
+					pass.texture(one.raw() != null ? one.raw() : VitrailMetalBridge.nativeHandle(one.view()),
+							slot.index());
 					if (slot.sampler() >= 0 && one.sampler() != null) {
 						pass.sampler(VitrailMetalBridge.nativeHandle(one.sampler()), slot.sampler());
 					}
@@ -817,19 +824,43 @@ final class PackCompute implements AutoCloseable {
 		}
 
 		private static ByteBuffer compileSpirv(String source) {
+			ByteBuffer optimised = compileSpirv(source, 2);
+			if (optimised != null || !lastRefusedByOptimiser) {
+				return optimised;
+			}
+
+			// shaderc compiled the module and only its optimiser refused it, which a pack passing a
+			// formatted image to a parameter declared without the format does (Photon's floodfill):
+			// SPIR-V calls those two types and the optimiser checks, where neither SPIRV-Cross nor
+			// Metal tells them apart. The module as compiled goes through.
+			Vitrail.logger().info("compute compiled without optimisation, which the optimiser refused");
+			return compileSpirv(source, 0);
+		}
+
+		/** Whether the last refusal was the optimiser's alone, the compile having succeeded. */
+		private static boolean lastRefusedByOptimiser;
+
+		private static ByteBuffer compileSpirv(String source, int optimisation) {
 			long compiler = Shaderc.shaderc_compiler_initialize();
 			long options = compileOptions();
+			Shaderc.shaderc_compile_options_set_optimization_level(options, optimisation);
 			ByteBuffer sourceBuffer = MemoryUtil.memUTF8(source, false);
 			ByteBuffer filename = MemoryUtil.memUTF8("shadowcomp.csh");
 			ByteBuffer entry = MemoryUtil.memUTF8("main");
 			long result = 0L;
+			lastRefusedByOptimiser = false;
 			try {
 				result = Shaderc.shaderc_compile_into_spv(compiler, sourceBuffer, SHADERC_COMPUTE,
 						filename, entry, options);
 				int status = Shaderc.shaderc_result_get_compilation_status(result);
 				if (status != 0) {
-					Vitrail.logger().warn("compute shaderc: {}",
-							Shaderc.shaderc_result_get_error_message(result));
+					String message = Shaderc.shaderc_result_get_error_message(result);
+					lastRefusedByOptimiser = optimisation != 0 && message != null
+							&& message.contains("failed to optimize");
+					if (!lastRefusedByOptimiser) {
+						Vitrail.logger().warn("compute shaderc: {}", message);
+						dumpFailed(source);
+					}
 					return null;
 				}
 
@@ -847,6 +878,22 @@ final class PackCompute implements AutoCloseable {
 				MemoryUtil.memFree(sourceBuffer);
 				Shaderc.shaderc_compile_options_release(options);
 				Shaderc.shaderc_compiler_release(compiler);
+			}
+		}
+
+		/** Writes a compute shaderc refused under the game directory, when asked to for debugging. */
+		private static void dumpFailed(String source) {
+			if (!Boolean.getBoolean("vitrailmetal.dumpFailed")) {
+				return;
+			}
+			try {
+				java.nio.file.Path dir = Vitrail.platform().gameDirectory().resolve("vitrail").resolve("failed");
+				java.nio.file.Files.createDirectories(dir);
+				java.nio.file.Path file = dir.resolve("compute-" + Integer.toHexString(source.hashCode()) + ".csh");
+				java.nio.file.Files.writeString(file, source);
+				Vitrail.logger().warn("compute source written to {}", file);
+			} catch (IOException e) {
+				Vitrail.logger().warn("could not write the failed compute: {}", e.toString());
 			}
 		}
 
@@ -939,8 +986,14 @@ final class PackCompute implements AutoCloseable {
 				return Bound.buffer(slice.buffer(), slice.offset());
 			}
 
-			if (CustomImages.storage(entry.name()) || StorageImages.storageBinding(entry.name())) {
-				throw new IllegalStateException("image " + entry.name() + " is not served on Metal yet");
+			StorageImages.Bound image = StorageImages.bound(entry.name());
+			if (image != null) {
+				return Bound.raw(image.texture(), image.storage()
+						? null : samplerFor(targets, samplers, entry.name()));
+			}
+
+			if (CustomImages.storage(entry.name())) {
+				throw new IllegalStateException("Missing storage image " + entry.name());
 			}
 
 			ColorTargets.PackBinding supplied = targets.packTexture(this.textureStage, entry.name());

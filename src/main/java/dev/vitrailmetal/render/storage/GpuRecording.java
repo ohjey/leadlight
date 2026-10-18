@@ -51,6 +51,8 @@ public final class GpuRecording {
 				: ((CommandEncoderAccessor) device.createCommandEncoder()).vitrail$backend();
 		if (backend instanceof VulkanCommandEncoder vulkan) {
 			vulkan.queueForDestroy(destruction::run);
+		} else if (backend != null) {
+			com.metallum.render.VitrailMetalBridge.destroyLater(backend, destruction);
 		}
 	}
 

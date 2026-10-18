@@ -22,7 +22,7 @@ import org.lwjgl.vulkan.VkFormatProperties;
  * two answers. The switch is written out rather than going through {@code valueOf} so that a
  * name that stops matching is a compilation error and not a lost frame.
  */
-final class GpuFormats {
+public final class GpuFormats {
 
 	static {
 		// The two enumerations are compiled separately, so a format added on the pack side after
@@ -39,7 +39,7 @@ final class GpuFormats {
 	private GpuFormats() {
 	}
 
-	static GpuFormat of(TargetFormat format) {
+	public static GpuFormat of(TargetFormat format) {
 		return switch (format) {
 			case R8_UNORM -> GpuFormat.R8_UNORM;
 			case R8_SNORM -> GpuFormat.R8_SNORM;

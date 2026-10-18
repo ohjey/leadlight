@@ -240,4 +240,9 @@ public abstract class MetalCommandEncoderMixin implements MultiTarget.Encoder, M
 	public boolean vitrail$viewport(int width, int height) {
 		return false;
 	}
+
+	@Override
+	public MTLBlitCommandEncoder vitrail$blit() {
+		return this.blitCommandEncoder();
+	}
 }

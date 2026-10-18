@@ -5,7 +5,9 @@ import org.lwjgl.PointerBuffer;
 import org.lwjgl.system.MemoryStack;
 import org.lwjgl.util.spvc.Spv;
 import org.lwjgl.util.spvc.Spvc;
+import org.lwjgl.util.spvc.SpvcMslConstexprSampler;
 import org.lwjgl.util.spvc.SpvcMslResourceBinding;
+import dev.vitrailmetal.Vitrail;
 import org.lwjgl.util.spvc.SpvcReflectedResource;
 
 import java.util.Arrays;
@@ -86,6 +88,8 @@ public final class SamplerSlots {
 			int[] ids = new int[sampled];
 			int[] bindings = new int[sampled];
 			int[] sets = new int[sampled];
+			String[] names = new String[sampled];
+			boolean[] integer = new boolean[sampled];
 			SpvcReflectedResource.Buffer reflected = sampled == 0 ? null
 					: SpvcReflectedResource.create(list.get(0), sampled);
 			for (int i = 0; i < sampled; i++) {
@@ -93,9 +97,16 @@ public final class SamplerSlots {
 				bindings[i] = Spvc.spvc_compiler_get_decoration(compiler, ids[i], Spv.SpvDecorationBinding);
 				sets[i] = Spvc.spvc_compiler_get_decoration(compiler, ids[i],
 						Spv.SpvDecorationDescriptorSet);
+				names[i] = reflected.get(i).nameString();
+				long type = Spvc.spvc_compiler_get_type_handle(compiler, reflected.get(i).base_type_id());
+				int sampledType = Spvc.spvc_type_get_basetype(Spvc.spvc_compiler_get_type_handle(compiler,
+						Spvc.spvc_type_get_image_sampled_type(type)));
+				integer[i] = sampledType == Spvc.SPVC_BASETYPE_INT32 || sampledType == Spvc.SPVC_BASETYPE_UINT32;
 			}
 
-			int[] order = sortedBindings(bindings);
+			boolean[] baked = overflow(names, bindings, sampled);
+			int[] order = Arrays.stream(bindings).filter(b -> !bakedBinding(b, bindings, baked)).distinct()
+					.sorted().toArray();
 			byte[][] building = BUILDING.get();
 			if (building == null) {
 				building = new byte[2][];
@@ -105,6 +116,23 @@ public final class SamplerSlots {
 			byte[] table = new byte[top + 1];
 			Arrays.fill(table, (byte) -1);
 			for (int i = 0; i < sampled; i++) {
+				if (baked[i]) {
+					SpvcMslConstexprSampler fixed = SpvcMslConstexprSampler.calloc(stack);
+					Spvc.spvc_msl_constexpr_sampler_init(fixed);
+					int filter = integer[i] ? Spvc.SPVC_MSL_SAMPLER_FILTER_NEAREST
+							: Spvc.SPVC_MSL_SAMPLER_FILTER_LINEAR;
+					int address = names[i].equals("noisetex") ? Spvc.SPVC_MSL_SAMPLER_ADDRESS_REPEAT
+							: Spvc.SPVC_MSL_SAMPLER_ADDRESS_CLAMP_TO_EDGE;
+					fixed.coord(Spvc.SPVC_MSL_SAMPLER_COORD_NORMALIZED)
+							.min_filter(filter).mag_filter(filter)
+							.mip_filter(integer[i] ? Spvc.SPVC_MSL_SAMPLER_MIP_FILTER_NEAREST
+									: Spvc.SPVC_MSL_SAMPLER_MIP_FILTER_LINEAR)
+							.s_address(address).t_address(address).r_address(address);
+					Spvc.spvc_compiler_msl_remap_constexpr_sampler_by_binding(compiler, sets[i], bindings[i],
+							fixed);
+					continue;
+				}
+
 				int slot = Arrays.binarySearch(order, bindings[i]);
 				table[bindings[i]] = (byte) Math.min(slot, 127);
 
@@ -118,12 +146,48 @@ public final class SamplerSlots {
 						.msl_sampler(slot);
 				Spvc.spvc_compiler_msl_add_resource_binding(compiler, binding);
 			}
+			if (Arrays.stream(order).count() > SLOTS) {
+				Vitrail.logger().warn("Metal: a stage reads {} textures whose samplers cannot be baked "
+						+ "in, past Metal's {} sampler slots", order.length, SLOTS);
+			}
 			building[stage] = table;
 		}
 	}
 
-	private static int[] sortedBindings(int[] bindings) {
-		return Arrays.stream(bindings).distinct().sorted().toArray();
+	/** Metal's sampler slots in one stage. */
+	private static final int SLOTS = 16;
+
+	private static final java.util.regex.Pattern COLOUR = java.util.regex.Pattern.compile("colortex\\d+");
+
+	/**
+	 * Which textures of a stage get their sampler baked into the shader, so the rest fit in
+	 * Metal's sixteen slots. None while they fit. Past that, every colour target: what Vitrail binds for a colour target is a clamped sampler, linear unless the
+	 * format is integer, and a mip filter that only matters where the read asks for a level (the
+	 * translation pins every read of a target without a chain to level nought), so a baked sampler
+	 * reads it as the bound one would. Depth, shadow, noise and custom images keep real slots, their
+	 * samplers being the ones that differ from pass to pass.
+	 */
+	private static boolean[] overflow(String[] names, int[] bindings, int count) {
+		boolean[] baked = new boolean[count];
+		if (count <= SLOTS) {
+			return baked;
+		}
+
+		// Metal counts a baked sampler against the same sixteen, but merges identical ones, and the
+		// colour targets' all come to one or two: so past the limit every colour target is baked.
+		for (int i = 0; i < count; i++) {
+			baked[i] = COLOUR.matcher(names[i]).matches();
+		}
+		return baked;
+	}
+
+	private static boolean bakedBinding(int binding, int[] bindings, boolean[] baked) {
+		for (int i = 0; i < bindings.length; i++) {
+			if (bindings[i] == binding && baked[i]) {
+				return true;
+			}
+		}
+		return false;
 	}
 
 	/**
@@ -165,7 +229,6 @@ public final class SamplerSlots {
 			return binding;
 		}
 
-		int slot = table[binding * 2 + stage];
-		return slot < 0 ? binding : slot;
+		return table[binding * 2 + stage];
 	}
 }

@@ -6,6 +6,7 @@ import dev.vitrailmetal.metal.SamplerSlots;
 import org.lwjgl.util.spvc.Spvc;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;
+import org.spongepowered.asm.mixin.injection.Coerce;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 
@@ -37,5 +38,17 @@ public abstract class MetalCrossShaderCompilerMixin {
 		int result = original.call(compiler, options);
 		SamplerSlots.remap(compiler);
 		return result;
+	}
+
+	/**
+	 * A one or three dimensional image is let through Metallum's check as two dimensional, as
+	 * Vitrail lets it through the game's: the texture bound is the one the engine allocated in the
+	 * declared shape, and the MSL declares that shape.
+	 */
+	@WrapOperation(method = "addToBindGroup", require = 1,
+			at = @At(value = "INVOKE", target = "Lcom/mojang/blaze3d/vulkan/glsl/SpvSampler;dimensions()I"))
+	private static int vitrail$allowLineAndVolume(@Coerce Object sampler, Operation<Integer> original) {
+		int dimension = original.call(sampler);
+		return dimension == 0 || dimension == 2 ? 1 : dimension;
 	}
 }

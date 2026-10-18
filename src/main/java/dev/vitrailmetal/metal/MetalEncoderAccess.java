@@ -1,5 +1,6 @@
 package dev.vitrailmetal.metal;
 
+import com.metallum.mtl.MTLBlitCommandEncoder;
 import com.metallum.mtl.MTLCommandBuffer;
 import com.metallum.mtl.MTLFence;
 
@@ -14,4 +15,7 @@ public interface MetalEncoderAccess {
 
 	/** Closes whatever Metal encoder Metallum has open. */
 	void vitrail$endEncoder();
+
+	/** A Metal blit encoder in Metallum's sequence, closed again by {@link #vitrail$endEncoder}. */
+	MTLBlitCommandEncoder vitrail$blit();
 }

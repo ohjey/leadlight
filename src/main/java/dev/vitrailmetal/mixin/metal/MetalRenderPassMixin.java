@@ -7,6 +7,8 @@ import com.metallum.mtl.MTLRenderCommandEncoder;
 import com.mojang.blaze3d.textures.GpuTextureView;
 import dev.vitrailmetal.metal.MultiTarget;
 import dev.vitrailmetal.metal.SamplerSlots;
+import dev.vitrailmetal.render.storage.StorageImages;
+import com.metallum.render.VitrailMetalBridge;
 import dev.vitrailmetal.metal.MetalHost;
 import dev.vitrailmetal.render.ShadowCompare;
 import org.joml.Vector4fc;
@@ -132,6 +134,16 @@ public abstract class MetalRenderPassMixin implements MultiTarget.Pass {
 		return pipeline instanceof MultiTarget.Pipeline;
 	}
 
+	/** The name of the resource being pushed, caught for the storage images bound by name. */
+	@Unique
+	private @Nullable String vitrail$pushing;
+
+	@Inject(method = "pushDescriptor", at = @At("HEAD"), require = 1)
+	private void vitrail$pushing(MTLRenderCommandEncoder encoder, @Coerce Object binding,
+			CallbackInfo callback) {
+		this.vitrail$pushing = VitrailMetalBridge.resourceName(binding);
+	}
+
 	@Redirect(method = "pushDescriptor", require = 1,
 			at = @At(value = "INVOKE",
 					target = "Lcom/metallum/render/MetalRenderPass;bindTextureAndSampler("
@@ -146,14 +158,30 @@ public abstract class MetalRenderPassMixin implements MultiTarget.Pass {
 				&& (holder.vitrail$comparedMask() & (1L << binding)) != 0L) {
 			sampler = MetalHost.compareSampler();
 		}
+
+		// A pack's own image, or a sampler hanging off one, is bound by name over whatever the pass
+		// was handed for it, as VulkanRenderPassMixin does on Vulkan.
+		String name = this.vitrail$pushing;
+		if (name != null) {
+			StorageImages.Bound image = StorageImages.bound(name);
+			if (image != null) {
+				texture = image.texture();
+			}
+		}
+
 		if ((stageMask & STAGE_VERTEX) != 0) {
 			encoder.setVertexTexture(texture, index);
-			encoder.setVertexSamplerState(sampler, SamplerSlots.slot(slots, binding, SamplerSlots.VERTEX));
+			int slot = SamplerSlots.slot(slots, binding, SamplerSlots.VERTEX);
+			if (slot >= 0 && slot < 16) {
+				encoder.setVertexSamplerState(sampler, slot);
+			}
 		}
 		if ((stageMask & STAGE_FRAGMENT) != 0) {
 			encoder.setFragmentTexture(texture, index);
-			encoder.setFragmentSamplerState(sampler,
-					SamplerSlots.slot(slots, binding, SamplerSlots.FRAGMENT));
+			int slot = SamplerSlots.slot(slots, binding, SamplerSlots.FRAGMENT);
+			if (slot >= 0 && slot < 16) {
+				encoder.setFragmentSamplerState(sampler, slot);
+			}
 		}
 	}
 }

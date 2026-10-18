@@ -69,4 +69,18 @@ public final class VitrailMetalBridge {
 		}
 		return mask;
 	}
+
+	/** Runs this once the frames still in flight have finished, on Metallum's own queue. */
+	public static boolean destroyLater(Object encoderBackend, Runnable destruction) {
+		if (encoderBackend instanceof MetalCommandEncoder encoder) {
+			encoder.queueForDestroy(destruction);
+			return true;
+		}
+		return false;
+	}
+
+	/** The name a pipeline resource binding of Metallum's carries. */
+	public static String resourceName(Object binding) {
+		return ((MetalCompiledRenderPipeline.ResourceBinding) binding).name();
+	}
 }
