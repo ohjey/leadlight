@@ -1,3 +1,21 @@
+Vitrail for Metallum: a modified version of Vitrail
+==================================================
+
+This is a modified version of Vitrail Shaders (https://github.com/avpbynf/Vitrail-Shaders,
+copyright avpbynf, LGPL-3.0-only), forked from upstream commit recorded in UPSTREAM_COMMIT and
+changed in October 2026 to run on Metallum's Metal backend instead of Minecraft's Vulkan one.
+
+What was changed: the Java packages were renamed from dev.vitrail to dev.vitrailmetal and the
+sources of the common, mc26.2 and fabric modules were merged into one Fabric project; the engine's
+Vulkan layer (compute dispatch, storage images and buffers, mip chains, comparison samplers,
+pipeline cache eviction, backend detection) was rewritten for Metal; and new code under
+dev/vitrailmetal/metal, dev/vitrailmetal/mixin/metal, dev/vitrailmetal/dev, com/metallum/render and
+com/metallum/mtl extends Metallum (MIT, https://github.com/kokodio/metallum) where shader packs need
+more than the game does. Every change is in this repository's git history, which starts with the
+unmodified upstream sources. Paths below that begin with common/src/main/java/dev/vitrail are now
+under src/main/java/dev/vitrailmetal.
+
+
 Third-party material in Vitrail
 ===============================
 
