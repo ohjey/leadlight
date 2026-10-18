@@ -67,6 +67,16 @@ loom {
 	}
 }
 
+// -PrunJava=<path to bin/java>: run the dev client on another Java, such as a launcher's bundled
+// runtime, whose SDK decides the Metal shader language version left unpinned.
+tasks.withType(JavaExec).matching { it.name == 'runClient' }.configureEach {
+	def runJava = project.findProperty('runJava')
+	if (runJava) {
+		javaLauncher.set(null as JavaLauncher)
+		executable = runJava.toString()
+	}
+}
+
 processResources {
 	def metadata = [
 		mod_id: project.mod_id,

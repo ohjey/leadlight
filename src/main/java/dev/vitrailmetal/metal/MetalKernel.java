@@ -78,6 +78,13 @@ public final class MetalKernel {
 	}
 
 	/**
+	 * MSL 3.1, in SPIRV-Cross's decimal encoding ({@code major * 10000 + minor * 100}). A hexadecimal
+	 * {@code 0x030000} reads as 19.66 there, past 3.2, and brings in 3.2's {@code coherent} buffers and
+	 * scoped {@code atomic_thread_fence}, which the device compiler refuses.
+	 */
+	private static final int MSL_VERSION = 3 * 10000 + 1 * 100;
+
+	/**
 	 * Builds the kernel, or answers null with the reason logged.
 	 *
 	 * @param device the Metal device
@@ -105,7 +112,7 @@ public final class MetalKernel {
 				Spvc.spvc_compiler_options_set_uint(options, Spvc.SPVC_COMPILER_OPTION_MSL_PLATFORM,
 						Spvc.SPVC_MSL_PLATFORM_MACOS);
 				Spvc.spvc_compiler_options_set_uint(options, Spvc.SPVC_COMPILER_OPTION_MSL_VERSION,
-						0x030000);
+						MSL_VERSION);
 				check(Spvc.spvc_compiler_install_compiler_options(compiler, options), "install");
 
 				int model = Spvc.spvc_compiler_get_execution_model(compiler);

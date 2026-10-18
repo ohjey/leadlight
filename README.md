@@ -59,6 +59,8 @@ And Metallum itself is extended where a shader pack needs more than the game doe
 - **sampler slots numbered per stage**, and samplers baked into the shader past Metal's sixteen;
 - fragment outputs padded to the target's components, which Metal requires;
 - **1D and 3D sampled textures**;
+- shaders compiled as **MSL 3.1** whatever Java runs the game (Metal otherwise picks the version
+  from the SDK the `java` binary was built with, MSL 3.0 for the launchers' Zulu runtimes);
 - GLSL comments stripped with a real scanner instead of two regular expressions, which cut pack
   code in half wherever a line comment held a `/*`.
 
@@ -91,7 +93,8 @@ These were bugs in Vitrail on Vulkan as well, fixed here:
 
 On an M4 Max, macOS 27, Metallum 0.0.24, Sodium 0.9.2: Photon v1.3b (default settings and with
 coloured lights), Complementary Reimagined r5.9.3 (default and with coloured lighting), BSL 10.1.8,
-Sildur's Vibrant 2.02 Extreme and Solas 3.7b, in the Overworld, Nether and End, day and night;
+Sildur's Vibrant 2.02 Extreme, Solas 3.7b, Noble 1.9.9, Bliss 2.1.2 and MakeUp UltraFast 9.5g, in
+the Overworld, Nether and End, day and night, on a recent JDK and on the Modrinth launcher's Zulu 25;
 Photon and BSL with Entity Texture Features 7.2.6, Entity Model Features 3.3.12 and Fresh Animations
 1.10.5 with its Extensions and Player packs.
 

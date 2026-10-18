@@ -22,9 +22,18 @@ import java.lang.foreign.MemorySegment;
  * the last bit of the two depths differs, a TAA jitter decides each frame which way, and the eyes
  * flicker on and off. MoltenVK turns the same option on for the same reason. The game's own
  * shaders and Sodium's declare nothing invariant, so nothing of theirs changes.
+ * <p>
+ * The options also pin the language to MSL 3.1. Left unset, Metal picks the newest version the
+ * running executable was linked against, so the same shader compiles on one Java and not on another:
+ * the launcher's runtime (Zulu, built on the macOS 13.3 SDK) gets MSL 3.0, a recent JDK the newest.
+ * 3.1 is what {@link dev.vitrailmetal.metal.MetalKernel} tells SPIRV-Cross to write for computes.
  */
 @Mixin(value = MTLDevice.class, remap = false)
 public abstract class MTLDeviceMixin {
+
+	/** {@code MTLLanguageVersion3_1}: major in the high half, minor in the low. */
+	@Unique
+	private static final long VITRAIL$MSL_3_1 = (3L << 16) | 1;
 
 	@Unique
 	private static MemorySegment vitrail$options = MemorySegment.NULL;
@@ -51,6 +60,7 @@ public abstract class MTLDeviceMixin {
 		if (Objc.nil(vitrail$options)) {
 			MemorySegment made = Objc.ptr(Objc.ptr(Objc.cls("MTLCompileOptions"), "alloc"), "init");
 			Objc.send(made, "setPreserveInvariance:", true);
+			Objc.send(made, "setLanguageVersion:", VITRAIL$MSL_3_1);
 			vitrail$options = made;
 		}
 		return vitrail$options;
