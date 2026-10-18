@@ -77,6 +77,38 @@ public abstract class MetalCommandEncoderMixin implements MultiTarget.Encoder, M
 	@Shadow
 	abstract MTLBlitCommandEncoder blitCommandEncoder();
 
+	@Inject(method = "createRenderPass", at = @At("HEAD"), require = 1)
+	private void vitrail$trace(RenderPassDescriptor descriptor,
+			CallbackInfoReturnable<RenderPassBackend> callback) {
+		if (!dev.vitrailmetal.dev.FrameTrace.on()) {
+			return;
+		}
+		StringBuilder line = new StringBuilder("pass ").append(descriptor.label().get()).append(" ->");
+		for (RenderPassDescriptor.Attachment<Optional<Vector4fc>> attachment : descriptor.colorAttachments()) {
+			if (attachment == null) {
+				line.append(" -");
+				continue;
+			}
+			GpuTexture texture = attachment.textureView().texture();
+			line.append(' ').append(texture.getLabel()).append('@')
+					.append(Integer.toHexString(System.identityHashCode(texture)))
+					.append(attachment.clearValue().isPresent() ? "[clear]" : "")
+					.append(this.pendingColorClears.containsKey(texture) ? "[pending]" : "");
+		}
+		dev.vitrailmetal.dev.FrameTrace.line(line.toString());
+	}
+
+	@Inject(method = "clearColorTexture", at = @At("HEAD"), require = 1)
+	private void vitrail$traceClear(GpuTexture texture, Vector4fc colour, CallbackInfo callback) {
+		dev.vitrailmetal.dev.FrameTrace.line("clear " + texture.getLabel() + "@"
+				+ Integer.toHexString(System.identityHashCode(texture)));
+	}
+
+	@Inject(method = "submit", at = @At("HEAD"), require = 1)
+	private void vitrail$traceFrame(CallbackInfo callback) {
+		dev.vitrailmetal.dev.FrameTrace.endFrame();
+	}
+
 	@Inject(method = "createRenderPass", at = @At("RETURN"), require = 1)
 	private void vitrail$extraTargets(RenderPassDescriptor descriptor,
 			CallbackInfoReturnable<RenderPassBackend> callback) {

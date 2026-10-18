@@ -320,14 +320,22 @@ public final class LegacyGlsl {
 	 * {@link #ENTITY_UNIFORMS}; it is drawn from a render type all the same, and the matrix that
 	 * render type was prepared with is the whole of its animation.
 	 * <p>
-	 * The glint is the one name here that is not already under an entity root, and it enters as a
-	 * root rather than through the tree because its parent is {@code gbuffers_textured}
+	 * <strong>The eyes are the second such name, and leaving them out is what made them flicker.</strong>
+	 * {@code gbuffers_spidereyes} is drawn over a mob that {@code gbuffers_entities} has just drawn,
+	 * through the same door and onto the same depth, with the game's {@code GREATER_THAN_OR_EQUAL}
+	 * test and no bias ({@code RenderPipelines.EYES}): the overlay is only seen where its depth equals
+	 * the body's to the last bit. Read from the run's matrix while the body reads the draw's, the two
+	 * placed the same vertex a hair apart, so the eyes failed the test outright, and with a pack's
+	 * TAA jitter passed it on some frames and not others. Iris reads both from the one matrix.
+	 * <p>
+	 * The glint and the eyes are the names here that are not already under an entity root, and they
+	 * enter as roots rather than through the tree because their parent is {@code gbuffers_textured}
 	 * ({@code pack/model/ProgramFallbacks.java:82}), which a sky pass reaches as well. A pack that
 	 * serves both out of one file is read twice, once per answer, which is what the translation key
 	 * of {@code PackProgram.loadGeometry} carries.
 	 */
 	private static final Set<String> GAME_DRAW_ROOTS =
-			Stream.concat(ENTITY_ROOTS.stream(), Stream.of("gbuffers_armor_glint"))
+			Stream.concat(ENTITY_ROOTS.stream(), Stream.of("gbuffers_armor_glint", "gbuffers_spidereyes"))
 					.collect(Collectors.toUnmodifiableSet());
 
 	/** The two roots above whose pass is drawn from the light rather than from the camera. */

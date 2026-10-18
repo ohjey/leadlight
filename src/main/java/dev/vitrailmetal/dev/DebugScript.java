@@ -123,6 +123,7 @@ public final class DebugScript {
 			case "screen" -> minecraft.gui.setScreen(rest.equals("packs")
 					? dev.vitrailmetal.screen.PackScreens.open(minecraft.gui.screen())
 					: null);
+			case "trace" -> FrameTrace.start(Integer.parseInt(rest));
 			case "fps" -> Vitrail.logger().info("debug script: {} fps", minecraft.getFps());
 			case "quit" -> minecraft.stop();
 			default -> Vitrail.logger().warn("debug script: unknown step {}", step);

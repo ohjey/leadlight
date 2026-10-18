@@ -39,6 +39,13 @@ dependencies {
 	implementation "net.fabricmc.fabric-api:fabric-api:${project.fabric_api_version}"
 	runtimeOnly "maven.modrinth:modmenu:${project.modmenu_version}"
 
+	// Dev client only, on request (-PwithEtf): the entity texture and model mods Fresh Animations
+	// needs, to check the emissive overlays they draw.
+	if (project.hasProperty('withEtf')) {
+		runtimeOnly "maven.modrinth:entitytexturefeatures:7.2.6-fabric-26.2"
+		runtimeOnly "maven.modrinth:entity-model-features:3.3.12-fabric-26.2"
+	}
+
 	testImplementation platform("org.junit:junit-bom:${project.junit_version}")
 	testImplementation "org.junit.jupiter:junit-jupiter"
 	testRuntimeOnly "org.junit.platform:junit-platform-launcher"

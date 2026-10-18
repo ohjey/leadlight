@@ -536,6 +536,10 @@ public final class EntityDraw extends FamilyDraw {
 				return this.afterDeferred;
 			}
 
+			if (this.element.startsWith(EARLY_PREFIX)) {
+				return false;
+			}
+
 			return blended() && !GamePipelines.solidPhase(this.pipeline);
 		}
 
@@ -1137,6 +1141,36 @@ public final class EntityDraw extends FamilyDraw {
 		twins(HAND_WATER_ELEMENTS, "hand_water_", HAND_WATER, RenderStage.HAND_TRANSLUCENT, true);
 	}
 
+	/** What names an early twin, and what {@link Element#afterStage} reads to put it before the stage. */
+	private static final String EARLY_PREFIX = "early_";
+
+	/**
+	 * The translucent entity rows again, bound BEFORE the deferred stage, for a draw that arrives
+	 * while the game is drawing its opaque features.
+	 * <p>
+	 * <strong>Who draws a blending render type at that moment: Entity Texture Features.</strong> Its
+	 * emissive layer (a texture's {@code _e}, Fresh Animations' glowing spider eyes among them) is
+	 * drawn with {@code entityTranslucent} straight away, while the model it lies on is being drawn,
+	 * rather than submitted to the translucent half the game would sort it into. The row for that
+	 * pipeline is bound after the stage, so its window was shut and the draw went back to the game:
+	 * drawn by the game's own shader into the game's own picture, unjittered, already tone mapped, and
+	 * carried into the pack by the scene seed wherever the pack's jittered body left a pixel uncovered.
+	 * That is a glow that flickers from frame to frame and comes out yellow where the texture is red.
+	 * <p>
+	 * Iris draws such a layer with the pack's program at the moment it arrives, which is what these
+	 * twins do. They write the coverage mask as every piece before the stage does, the early glint
+	 * being the precedent for a blending piece there, so the seed stays off what they drew.
+	 */
+	private static final Map<RenderPipeline, Element> EARLY_ELEMENTS = new LinkedHashMap<>();
+
+	static {
+		ELEMENTS.values().stream()
+				.filter(mob -> mob.afterStage() && ENTITIES_TRANSLUCENT.equals(mob.program()) && !mob.text())
+				.map(mob -> new Element(mob.pipeline(), EARLY_PREFIX + mob.element(), mob.program(),
+						mob.alphaTest(), mob.stage(), false, mob.fullbright()))
+				.forEach(element -> EARLY_ELEMENTS.put(element.pipeline(), element));
+	}
+
 	private static void twins(Map<RenderPipeline, Element> into, String prefix, String program,
 			RenderStage stage, boolean afterDeferred) {
 		ELEMENTS.values().stream()
@@ -1600,9 +1634,21 @@ public final class EntityDraw extends FamilyDraw {
 		// One table or the other and no falling between them: the block table is built from every row
 		// of the mob one, so a pipeline either has both halves or neither. The two hand tables are
 		// built the same way, from the same rows.
-		return BlockEntityGeometry.drawing()
-				? BLOCK_ELEMENTS.get(pipeline)
-				: ELEMENTS.get(pipeline);
+		if (BlockEntityGeometry.drawing()) {
+			return BLOCK_ELEMENTS.get(pipeline);
+		}
+
+		// A translucent row offered while only the opaque window is open takes its early twin, which
+		// EARLY_ELEMENTS says the why of; in its own window it is the row itself, as before.
+		Element row = ELEMENTS.get(pipeline);
+		if (row != null && opaqueFeatures && !translucentFeatures && row.afterStage()) {
+			Element early = EARLY_ELEMENTS.get(pipeline);
+			if (early != null) {
+				return early;
+			}
+		}
+
+		return row;
 	}
 
 	private final PackChain owner;
@@ -2426,6 +2472,13 @@ public final class EntityDraw extends FamilyDraw {
 				groups.add(List.of(CRUMBLING_EARLY));
 				groups.add(List.of(CRUMBLING_LATE));
 			}
+		}
+
+		// The early twins of the translucent rows, a group of their own: a place that cannot answer
+		// for one leaves an emissive layer to the game, which is today's picture, and takes nothing
+		// else with it.
+		if (wanted) {
+			groups.add(twinsOf(served, EARLY_ELEMENTS));
 		}
 
 		if (HandDraw.wanted()) {

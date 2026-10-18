@@ -227,7 +227,7 @@ final class EntityProgram extends FamilyProgram {
 				// this; the first is read in Iris itself.
 				game.getPrimitiveTopology(), game.isCull(),
 				// The piece's own, TURNED ROUND rather than replaced. See intoMap.
-				shadow ? intoMap(game.getDepthStencilState()) : game.getDepthStencilState(),
+				shadow ? intoMap(game.getDepthStencilState()) : overlay(game),
 				// The piece's own, and the halves answer differently: NONE for a mob, which is
 				// Iris's answer rather than a reading of what the pass is, and BLOCK_ENTITIES for a
 				// block entity, which Iris really does pose. The class comment has the file:line.
@@ -240,6 +240,40 @@ final class EntityProgram extends FamilyProgram {
 				// Drawn in the game's own volume, so the dh matrices answer the game's.
 				false),
 				bound, values, load, element.format(), writes, targets, chainRuns));
+	}
+
+	/** The bias {@link #overlay} adds, in Metal's units: one depth step and one step a pixel of slope. */
+	private static final float OVERLAY_BIAS = 1.0F;
+
+	/**
+	 * The piece's own depth state, with a hair of bias toward the camera where the piece blends over
+	 * a surface already drawn.
+	 * <p>
+	 * <strong>What it is for: a mob's glowing eyes, and every emissive or translucent layer laid over
+	 * a body</strong> (Entity Texture Features draws a texture's {@code _e} layer that way). The game
+	 * draws the overlay over the same vertices as the body, tests it {@code GREATER_THAN_OR_EQUAL}
+	 * with no bias ({@code RenderPipelines.EYES}), and so needs the two depths to be equal to the last
+	 * bit. Under a pack they are drawn by two different programs ({@code gbuffers_entities} and
+	 * {@code gbuffers_spidereyes} or {@code gbuffers_entities_translucent}), compiled apart, and the
+	 * last bit of the depth is not the same in both: with the pack's TAA jitter moving every vertex
+	 * by a fraction of a pixel, which way it falls changes from frame to frame and the eyes flicker on
+	 * and off. Iris does not meet it because OpenGL drivers compile both the same way; Metal's
+	 * compiler does not promise that across two programs, invariance or not.
+	 * <p>
+	 * One depth step and one step a pixel of slope, the smallest bias the hardware has, is past any
+	 * rounding of the same arithmetic and short of anything a player could see through: the game's own
+	 * decals and text take ten.
+	 */
+	private static DepthStencilState overlay(RenderPipeline game) {
+		DepthStencilState state = game.getDepthStencilState();
+		boolean blends = game.getColorTargetState() != null
+				&& game.getColorTargetState().blendFunction().isPresent();
+		if (state == null || !blends || state.depthTest() != CompareOp.GREATER_THAN_OR_EQUAL) {
+			return state;
+		}
+
+		return new DepthStencilState(state.depthTest(), state.writeDepth(),
+				state.depthBiasScaleFactor() + OVERLAY_BIAS, state.depthBiasConstant() + OVERLAY_BIAS);
 	}
 
 	/**

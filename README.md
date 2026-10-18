@@ -62,6 +62,21 @@ And Metallum itself is extended where a shader pack needs more than the game doe
 - GLSL comments stripped with a real scanner instead of two regular expressions, which cut pack
   code in half wherever a line comment held a `/*`.
 
+## Fixes over Vitrail
+
+These were bugs in Vitrail on Vulkan as well, fixed here:
+
+- **Flickering, yellow emissive layers with Entity Texture Features** (Fresh Animations' glowing
+  spider eyes, any `_e` texture). ETF draws its emissive layer immediately, while the game is drawing
+  solid entities, with a translucent render type. Vitrail only took translucent entity draws in
+  its translucent window, so it handed these to the game's own shader, which drew them unjittered
+  and already tone mapped into the game's picture; that showed through the pack's TAA-jittered body
+  on some frames and came out yellow. Such draws now go through the pack's translucent entity
+  program at the moment they arrive, as Iris does.
+- **Glowing eyes (`gbuffers_spidereyes`)** now read the same per-draw model-view matrix as the body
+  they are drawn over, and the shaders are compiled with Metal's `preserveInvariance`, so the overlay
+  and the body land on the same depth.
+
 ## Not supported (yet)
 
 - **Geometry shaders.** Metal has no geometry stage. As on a Vulkan device without one, a geometry
@@ -76,7 +91,9 @@ And Metallum itself is extended where a shader pack needs more than the game doe
 
 On an M4 Max, macOS 27, Metallum 0.0.24, Sodium 0.9.2: Photon v1.3b (default settings and with
 coloured lights), Complementary Reimagined r5.9.3 (default and with coloured lighting), BSL 10.1.8,
-Sildur's Vibrant 2.02 Extreme and Solas 3.7b, in the Overworld, Nether and End, day and night.
+Sildur's Vibrant 2.02 Extreme and Solas 3.7b, in the Overworld, Nether and End, day and night;
+Photon and BSL with Entity Texture Features 7.2.6, Entity Model Features 3.3.12 and Fresh Animations
+1.10.5 with its Extensions and Player packs.
 
 ## Building
 
