@@ -28,6 +28,7 @@ import java.util.List;
  * hud off            hides the HUD (hud on shows it again)
  * fps                logs the frame rate the game counted over the last second
  * screen packs       opens the pack screen, as the I key does (screen close closes it)
+ * turn 3             turns the camera by this many degrees every tick (turn 0 stops)
  * quit               closes the game
  * </pre>
  */
@@ -36,6 +37,9 @@ public final class DebugScript {
 	private static final @Nullable Path FILE = file();
 
 	private static @Nullable ArrayDeque<String> steps;
+
+	/** Degrees the camera turns each tick, set by the turn step. */
+	private static float turning;
 
 	/** The next step runs once the clock passes this. */
 	private static long resumeAt;
@@ -125,9 +129,55 @@ public final class DebugScript {
 					: null);
 			case "trace" -> FrameTrace.start(Integer.parseInt(rest));
 			case "fps" -> Vitrail.logger().info("debug script: {} fps", minecraft.getFps());
+			case "turn" -> turning = Float.parseFloat(rest);
+			case "pacing" -> {
+				java.util.List<Long> sorted = new java.util.ArrayList<>(intervals);
+				java.util.Collections.sort(sorted);
+				double mean = sorted.stream().mapToLong(Long::longValue).average().orElse(0);
+				double sd = Math.sqrt(sorted.stream().mapToDouble(v -> (v - mean) * (v - mean)).average().orElse(0));
+				Vitrail.logger().info("debug script: pacing {} frames mean {} us sd {} us p50 {} p95 {} p99 {} max {}",
+						sorted.size(), Math.round(mean), Math.round(sd),
+						sorted.isEmpty() ? 0 : sorted.get(sorted.size() / 2),
+						sorted.isEmpty() ? 0 : sorted.get(sorted.size() * 95 / 100),
+						sorted.isEmpty() ? 0 : sorted.get(sorted.size() * 99 / 100),
+						sorted.isEmpty() ? 0 : sorted.getLast());
+				long median = sorted.isEmpty() ? 0 : sorted.get(sorted.size() / 2);
+				StringBuilder spikes = new StringBuilder();
+				long at = 0;
+				long last = -1;
+				for (long interval : intervals) {
+					at += interval;
+					if (interval > 2 * median) {
+						spikes.append(last < 0 ? "" : " +" + (at - last) / 1000).append("(").append(interval / 1000).append(")");
+						last = at;
+					}
+				}
+				Vitrail.logger().info("debug script: spikes ms-apart(ms-long):{}", spikes);
+				intervals.clear();
+			}
 			case "quit" -> minecraft.stop();
 			default -> Vitrail.logger().warn("debug script: unknown step {}", step);
 		}
+	}
+
+	private static long lastFrame;
+
+	/** Frame intervals in microseconds while turning, for the pacing step. */
+	private static final java.util.List<Long> intervals = new java.util.ArrayList<>();
+
+	/**
+	 * Called at the head of every rendered frame: turns the camera by the turn step's rate, scaled to
+	 * the time since the last frame, so it moves on every frame as the mouse does.
+	 */
+	public static void frame() {
+		long now = System.nanoTime();
+		Minecraft minecraft = Minecraft.getInstance();
+		if (turning != 0.0F && minecraft.player != null && lastFrame != 0L) {
+			float ticks = (now - lastFrame) / 50_000_000.0F;
+			intervals.add((now - lastFrame) / 1000L);
+			minecraft.player.setYRot(minecraft.player.getYRot() + turning * ticks);
+		}
+		lastFrame = now;
 	}
 
 	private static @Nullable Path file() {

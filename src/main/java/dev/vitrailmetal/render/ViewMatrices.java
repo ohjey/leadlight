@@ -290,6 +290,8 @@ public final class ViewMatrices implements ViewSource {
 
 		this.far = far;
 		this.renderDistanceChunks = renderDistanceChunks;
+		dev.vitrailmetal.dev.FrameTrace.line(String.format("advance view m00=%.5f m20=%.5f previous m00=%.5f m20=%.5f",
+				this.modelView.m00(), this.modelView.m20(), this.previousModelView.m00(), this.previousModelView.m20()));
 	}
 
 	/**

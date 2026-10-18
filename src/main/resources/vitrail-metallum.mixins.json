@@ -91,6 +91,7 @@
 		"metal.MetalDrawContextMixin",
 		"metal.MetalGpuTextureMixin",
 		"metal.MetalDevicePipelinesMixin",
-		"metal.MTLDeviceMixin"
+		"metal.MTLDeviceMixin",
+		"DebugFrameMixin"
 	]
 }
