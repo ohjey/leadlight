@@ -2,30 +2,29 @@
 	"schemaVersion": 1,
 	"id": "${mod_id}",
 	"version": "${mod_version}",
-	"name": "Vitrail for Metallum",
-	"description": "OptiFine-format shader packs on Metallum's Metal renderer. A fork of Vitrail Shaders by avpbynf.",
-	"authors": [
-		"avpbynf (Vitrail)"
+	"name": "Leadlight",
+	"description": "OptiFine-format shader packs (Photon, Complementary, BSL, ...) on Metallum's Metal renderer for Apple silicon Macs, unmodified. Built on Vitrail by avpbynf.",
+	"authors": [],
+	"contributors": [
+		"avpbynf (Vitrail, the shader engine Leadlight is built on)"
 	],
-	"contact": {
-		"sources": "https://github.com/avpbynf/Vitrail-Shaders"
-	},
+	"contact": {},
 	"license": "LGPL-3.0-only",
-	"icon": "vitrail.png",
+	"icon": "leadlight.png",
 	"environment": "client",
 	"entrypoints": {
 		"client": [
-			"dev.vitrailmetal.fabric.VitrailFabric"
+			"dev.leadlight.fabric.LeadlightFabric"
 		],
 		"sodium:config_api_user": [
-			"dev.vitrailmetal.sodium.ConfigEntry"
+			"dev.leadlight.sodium.ConfigEntry"
 		]
 	},
 	"mixins": [
-		"vitrail-metallum.mixins.json",
-		"vitrail-metallum-game.mixins.json",
-		"vitrail-metallum-fabric.mixins.json",
-		"vitrail-metallum-dh.mixins.json"
+		"leadlight.mixins.json",
+		"leadlight-game.mixins.json",
+		"leadlight-fabric.mixins.json",
+		"leadlight-dh.mixins.json"
 	],
 	"depends": {
 		"fabricloader": ">=${fabric_loader_min_version}",
@@ -36,7 +35,8 @@
 		"fabric-lifecycle-events-v1": "*"
 	},
 	"breaks": {
-		"vitrail": "*"
+		"vitrail": "*",
+		"vitrail_metallum": "*"
 	},
 	"custom": {
 		"sodium:options": {

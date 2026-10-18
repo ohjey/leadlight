@@ -2,11 +2,11 @@ plugins {
 	id 'net.fabricmc.fabric-loom' version "${loom_version}"
 }
 
-version = "${project.mod_version}+vitrail.${project.upstream_version}+metallum.${project.metallum_version}"
+version = "${project.mod_version}+mc${project.minecraft_version}"
 group = project.maven_group
 
 base {
-	archivesName = 'vitrail-metallum'
+	archivesName = 'leadlight'
 }
 
 repositories {
@@ -92,8 +92,8 @@ processResources {
 		expand(metadata)
 	}
 
-	from('src/main/resources/vitrail.png') {
-		into 'assets/vitrail/textures/gui'
+	from('src/main/resources/leadlight.png') {
+		into 'assets/leadlight/textures/gui'
 		rename { 'config-icon.png' }
 	}
 }

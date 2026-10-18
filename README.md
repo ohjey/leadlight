@@ -1,14 +1,17 @@
-# Vitrail for Metallum
+<p align="center"><img src="src/main/resources/leadlight.png" width="128" alt="Leadlight"></p>
 
-OptiFine-format shader packs (Photon, Complementary, BSL, Sildur's, Solas, ...) on
-[Metallum](https://modrinth.com/mod/metallum-mc), the Metal renderer for Minecraft on macOS.
-Unmodified packs, picked and configured the way they are under Vitrail.
+# Leadlight
 
-This is a fork of [Vitrail Shaders](https://github.com/avpbynf/Vitrail-Shaders) by avpbynf, which
-does the same thing on Minecraft's own Vulkan renderer. Vitrail's pack loader, GLSL translator,
-uniform catalogue, frame schedule and settings screen are used unchanged; what this fork changes is
-the layer underneath, where Vitrail talks to Vulkan, so that it talks to Metallum's Metal backend
-instead.
+Shader packs on Apple silicon Macs, through [Metallum](https://modrinth.com/mod/metallum-mc)'s
+Metal renderer. Leadlight runs OptiFine-format packs (Photon, Complementary, BSL, Sildur's, Solas,
+Noble, Bliss, MakeUp, ...) **unmodified**, picked and configured the way you would under Iris.
+
+Leadlight is built on [Vitrail](https://github.com/avpbynf/Vitrail-Shaders) by avpbynf, which does
+the same thing on Minecraft's own Vulkan renderer. Vitrail's pack loader, GLSL translator, uniform
+catalogue, frame schedule and settings screen are used here; what Leadlight changes is the layer
+underneath, where the engine talks to the GPU, so that it talks to Metallum's Metal backend instead.
+Leadlight is an independent project and is not affiliated with or endorsed by the authors of Vitrail,
+Metallum, Iris or OptiFine.
 
 ## Requirements
 
@@ -16,25 +19,30 @@ instead.
 | --- | --- |
 | Minecraft | 26.2 |
 | Fabric Loader | 0.19.3 or later, with Fabric API |
-| Metallum | 0.0.24 (exactly: this mod hooks Metallum's internals) |
+| Metallum | 0.0.24 (exactly: Leadlight hooks Metallum's internals) |
 | Sodium | 0.9.x |
 | Mac | Apple silicon (M1 or later) |
 
 ## Install
 
-1. Put `vitrail-metallum-<version>.jar` in `mods/` next to Metallum, Sodium and Fabric API.
+1. Put `leadlight-<version>.jar` in `mods/` next to Metallum, Sodium and Fabric API.
 2. Leave **Video Settings > Graphics API** on its default, which Metallum labels **Prefer Metal**.
-3. Put shader packs in `shaderpacks/` as usual, and pick one on the **Vitrail** page of the video
+3. Put shader packs in `shaderpacks/` as usual, and pick one on the **Leadlight** page of the video
    settings, or with the `I` key. `K` turns shaders off and on, `R` reloads the pack from disk.
 
-Remove Iris, and the original Vitrail, from the same instance: Iris draws on OpenGL only, and
-Vitrail on Vulkan only. The mod refuses to load next to the original Vitrail.
+Remove Iris and Vitrail from the same instance: Iris draws on OpenGL only, and Vitrail on Vulkan
+only. Leadlight refuses to load next to Vitrail.
 
-Pack settings are stored next to the pack (`shaderpacks/<pack>.zip.txt`), in the file Iris uses
-for the same pack. The mod's own files are in `vitrail/` in the instance folder, shared with
-Vitrail.
+Pack settings are stored next to the pack (`shaderpacks/<pack>.zip.txt`), in the file Iris uses for
+the same pack, so settings carry over from Iris. Leadlight's own files are in `leadlight/` in the
+instance folder.
 
-## What changed from Vitrail
+## Works with
+
+Distant Horizons (far terrain reaches the pack), Continuity with connected-texture and PBR resource
+packs such as Patrix, and Entity Texture Features / Entity Model Features with Fresh Animations.
+
+## What Leadlight changes from Vitrail
 
 Everything the engine did through Vulkan is done through Metal here:
 
@@ -53,6 +61,11 @@ Everything the engine did through Vulkan is done through Metal here:
   took the OpenGL road, whose lightmap hook casts the game's texture to an OpenGL one and stopped the
   game at the loading screen; it now draws through Blaze3D as it does under Vitrail on Vulkan, and
   its far terrain reaches the pack.
+- **Resource-pack normal and specular maps** are uploaded one whole mip level at a time. One upload
+  per sprite and level, as on Vulkan, costs Metallum a staging copy and a blit encoder each; with
+  Continuity over a pack like Patrix that was tens of thousands in one command buffer, which the GPU
+  failed as out of memory, leaving the game stuck on the Mojang screen. Failed Metal command buffers
+  are now logged, as is a failure in the startup step Minecraft runs without reporting one.
 - **Entity pipelines** are evicted from Metallum's cache when the pack's vertex layout changes, and
   the live pack's pipelines are kept across resource reloads, as Vitrail does with Vulkan's.
 
@@ -70,7 +83,7 @@ And Metallum itself is extended where a shader pack needs more than the game doe
 
 ## Fixes over Vitrail
 
-These were bugs in Vitrail on Vulkan as well, fixed here:
+These were bugs in Vitrail on Vulkan as well, fixed in Leadlight:
 
 - **Flickering, yellow emissive layers with Entity Texture Features** (Fresh Animations' glowing
   spider eyes, any `_e` texture). ETF draws its emissive layer immediately, while the game is drawing
@@ -88,12 +101,6 @@ These were bugs in Vitrail on Vulkan as well, fixed here:
   the builtin is an output and the unwritten value failed the depth test, so no water was drawn. A
   stage that reads `gl_FragDepth` and never writes it now reads `gl_FragCoord.z` instead.
 
-- **Stuck on the Mojang screen with Continuity and a connected-textures pack** (Patrix). The normal
-  and specular atlases were uploaded one sprite and one mip level at a time; Metallum gives each
-  upload its own staging copy and blit encoder, and with Continuity's sprites that was tens of
-  thousands in one command buffer, which the GPU failed as out of memory, dropping every frame
-  after it. Each level is now laid out on the CPU and uploaded once. Failed Metal command buffers
-  are now logged, and so is a failure in the startup step Minecraft runs without reporting one.
 
 ## Not supported (yet)
 
@@ -102,7 +109,7 @@ These were bugs in Vitrail on Vulkan as well, fixed here:
 - **Background shader compilation.** Vitrail compiles the families a pack draws later (entities,
   particles, ...) ahead of time on Vulkan only; here they compile on their first draw, which can
   cost a short hitch the first time each appears.
-- **Pass timings** (`-Dvitrail.passTimings`): Metallum has no GPU timestamps.
+- **Pass timings** (`-Dleadlight.passTimings`): Metallum has no GPU timestamps.
 
 ## Tested
 
@@ -122,11 +129,18 @@ Needs JDK 25.
 ```
 
 The jar is written to `build/libs/`. `./gradlew runClient` starts a development client with
-Metallum, Sodium and Fabric API. For unattended checks, `-Dvitrailmetal.debugScript=<file>` runs a
+Metallum, Sodium and Fabric API. For unattended checks, `-Dleadlight.debugScript=<file>` runs a
 list of steps once a world is on screen (see `dev/DebugScript.java`).
 
-## Licence
+## Credits and licence
 
-LGPL-3.0-only, as Vitrail. See [LICENSE](LICENSE), [GPL-3.0.txt](GPL-3.0.txt) and [NOTICE](NOTICE).
-Vitrail's own documentation is kept in `docs-upstream/`; it describes the Vulkan engine this was
-forked from, and most of it applies unchanged.
+Leadlight is a modified version of Vitrail by avpbynf, and is distributed under the same licence,
+the GNU Lesser General Public License version 3 only: see [LICENSE](LICENSE) and
+[GPL-3.0.txt](GPL-3.0.txt). [NOTICE](NOTICE) says what was changed from Vitrail and credits the
+material Vitrail reuses from Iris and other projects. The complete source of every release is in this
+repository.
+
+Vitrail's own documentation is kept in `docs-upstream/`. It describes the Vulkan engine Leadlight
+is built on, and most of it applies unchanged.
+
+Metallum is by kokodio (MIT). Leadlight depends on it and does not include it.
