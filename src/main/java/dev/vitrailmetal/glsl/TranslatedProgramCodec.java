@@ -34,7 +34,7 @@ import java.util.Set;
 final class TranslatedProgramCodec {
 
 	/** Bumped by hand when the layout changes. It is part of the key, so old blobs go unread. */
-	static final String FORMAT = "vitrail-translation-6";
+	static final String FORMAT = "vitrail-metallum-translation-6";
 
 	private TranslatedProgramCodec() {
 	}

@@ -59,7 +59,7 @@ public final class BackendPlaceholder extends Screen {
 
 	private void switchToVulkan() {
 		Minecraft minecraft = Minecraft.getInstance();
-		minecraft.options.preferredGraphicsBackend().set(PreferredGraphicsApi.VULKAN);
+		minecraft.options.preferredGraphicsBackend().set(PreferredGraphicsApi.DEFAULT);
 		minecraft.options.save();
 
 		IntegratedServer server = minecraft.getSingleplayerServer();

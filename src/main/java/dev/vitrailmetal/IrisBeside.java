@@ -57,7 +57,7 @@ public final class IrisBeside {
 	 */
 	public static void loaded(Options options) {
 		if (askedVulkan == null) {
-			askedVulkan = options.preferredGraphicsBackend().get() == PreferredGraphicsApi.VULKAN;
+			askedVulkan = options.preferredGraphicsBackend().get() != PreferredGraphicsApi.OPENGL;
 		}
 	}
 
@@ -75,7 +75,7 @@ public final class IrisBeside {
 		if (asked == null) {
 			Minecraft minecraft = Minecraft.getInstance();
 			asked = minecraft != null
-					&& minecraft.options.preferredGraphicsBackend().get() == PreferredGraphicsApi.VULKAN;
+					&& minecraft.options.preferredGraphicsBackend().get() != PreferredGraphicsApi.OPENGL;
 		}
 
 		return !asked;

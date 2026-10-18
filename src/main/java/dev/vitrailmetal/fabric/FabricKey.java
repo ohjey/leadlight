@@ -28,6 +28,9 @@ final class FabricKey {
 		KeyMappingHelper.registerKeyMapping(SettingsKey.RELOAD);
 		KeyMappingHelper.registerKeyMapping(SettingsKey.TOGGLE);
 		ClientTickEvents.START_CLIENT_TICK.register(_ -> EngineStages.clientTickStart());
-		ClientTickEvents.END_CLIENT_TICK.register(_ -> EngineStages.clientTick());
+		ClientTickEvents.END_CLIENT_TICK.register(_ -> {
+			EngineStages.clientTick();
+			dev.vitrailmetal.dev.DebugScript.tick();
+		});
 	}
 }

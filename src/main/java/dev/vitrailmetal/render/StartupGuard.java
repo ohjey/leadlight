@@ -78,7 +78,7 @@ public final class StartupGuard {
 
 		PreferredGraphicsApi wanted = asked == GraphicsApiChoice.OPENGL
 				? PreferredGraphicsApi.OPENGL
-				: PreferredGraphicsApi.VULKAN;
+				: PreferredGraphicsApi.DEFAULT; // Metallum puts Metal first under Default
 		// Set rather than merely kept: a launch that already walked the setting down to Default, or
 		// on to OpenGL, would otherwise stay there for good. Coming BACK is what was asked for.
 		if (options.preferredGraphicsBackend().get() != wanted) {

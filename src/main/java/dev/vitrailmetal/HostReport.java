@@ -45,7 +45,7 @@ public final class HostReport {
 	 * passes {@code OpenGL}. Compared rather than matched against a list, so a backend nobody here
 	 * has heard of is treated as one this mod was not written for, which is what it would be.
 	 */
-	private static final String VULKAN = "Vulkan";
+	private static final String VULKAN = "Metal";
 
 	/**
 	 * Answered where the device is not up yet, which at client setup cannot happen: the game builds
@@ -182,7 +182,7 @@ public final class HostReport {
 
 		minecraft.gui.hud.getChat().addClientSystemMessage(Component.translatable(
 				ScreenText.OTHER_BACKEND, backend(), Component.translatable(ScreenText.GRAPHICS_API),
-				Component.translatable(ScreenText.GRAPHICS_API_VULKAN))
+				Component.literal("Prefer Metal"))
 				.withStyle(ChatFormatting.RED));
 	}
 
@@ -221,8 +221,8 @@ public final class HostReport {
 
 		if (IrisBeside.draws()) {
 			Vitrail.logger().info("This game is running the {} backend with Iris installed, so Iris "
-					+ "draws the packs and {} stands aside. Set Graphics API to \"Prefer Vulkan "
-					+ "(Experimental)\" under Options, Video Settings, and restart to draw them with {} "
+					+ "draws the packs and {} stands aside. Set Graphics API to \"Prefer Metal\" "
+					+ "under Options, Video Settings, and restart to draw them with {} "
 					+ "instead", backend(), Vitrail.MOD_NAME, Vitrail.MOD_NAME);
 
 			return;
@@ -231,9 +231,9 @@ public final class HostReport {
 		Vitrail.logger().error("This game is running the {} backend and {}'s programs are translated "
 				+ "for {} alone. The mod loads, and a pack it is asked for is neither read nor drawn: "
 				+ "the game keeps its own image. Set "
-				+ "Graphics API to \"Prefer Vulkan (Experimental)\" under Options, Video Settings, "
+				+ "Graphics API to \"Prefer Metal\" (Metallum) under Options, Video Settings, "
 				+ "and restart. If it was already set there, either a launch argument forced this "
-				+ "backend, which the game says higher up, or the Vulkan boot failed and the game "
+				+ "backend, which the game says higher up, or Metallum is missing or failed and the game "
 				+ "fell back: the reason is in the lines the game logged before this one",
 				backend(), Vitrail.MOD_NAME, VULKAN);
 	}

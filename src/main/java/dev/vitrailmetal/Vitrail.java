@@ -17,7 +17,7 @@ import java.nio.charset.StandardCharsets;
 public final class Vitrail {
 
 	public static final String MOD_ID = "vitrail";
-	public static final String MOD_NAME = "Vitrail";
+	public static final String MOD_NAME = "Vitrail for Metallum";
 
 	private static final Logger LOGGER = LoggerFactory.getLogger(MOD_NAME);
 

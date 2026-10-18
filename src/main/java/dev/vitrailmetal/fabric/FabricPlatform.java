@@ -21,7 +21,7 @@ final class FabricPlatform implements VitrailPlatform {
 
 	@Override
 	public String modVersion() {
-		return versionOf(Vitrail.MOD_ID);
+		return versionOf("vitrail_metallum");
 	}
 
 	@Override

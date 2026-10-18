@@ -80,6 +80,7 @@
 		"VulkanQueueSubmitMixin",
 		"VulkanRenderPassMixin",
 		"VulkanRenderPipelineMixin",
-		"WeatherEffectRendererMixin"
+		"WeatherEffectRendererMixin",
+		"metal.MetalBackendMixin"
 	]
 }

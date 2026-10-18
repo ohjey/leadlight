@@ -177,7 +177,7 @@ public final class ModuleCache {
 	 * for a module can move without this layout moving, so the pass carries a version of its own
 	 * that {@link #keyOf} hashes beside this.
 	 */
-	private static final String FORMAT = "vitrail-module-3";
+	private static final String FORMAT = "vitrail-metallum-module-3";
 
 	private static final String FOLDER = "modules";
 
