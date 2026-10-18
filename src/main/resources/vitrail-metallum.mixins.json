@@ -81,6 +81,13 @@
 		"VulkanRenderPassMixin",
 		"VulkanRenderPipelineMixin",
 		"WeatherEffectRendererMixin",
-		"metal.MetalBackendMixin"
+		"metal.MetalBackendMixin",
+		"metal.MetalDeviceSourceMixin",
+		"metal.MetalCrossShaderCompilerMixin",
+		"metal.MetalCompiledRenderPipelineMixin",
+		"metal.MetalRenderPassMixin",
+		"metal.MetalCommandEncoderMixin",
+		"metal.MetalRenderPassInvoker",
+		"metal.MetalDrawContextMixin"
 	]
 }
