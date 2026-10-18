@@ -662,6 +662,11 @@ final class PackCompute implements AutoCloseable {
 				return new Bound(null, 0L, view, null, sampler);
 			}
 
+			/** A buffer of the engine's own making, a pack's storage buffer. */
+			static Bound rawBuffer(MemorySegment buffer) {
+				return new Bound(null, 0L, null, buffer, null);
+			}
+
 			/** A texture of the engine's own making, a pack's custom image. */
 			static Bound raw(MemorySegment texture, @Nullable GpuSampler sampler) {
 				return new Bound(null, 0L, null, texture, sampler);
@@ -711,6 +716,12 @@ final class PackCompute implements AutoCloseable {
 
 					if (one.buffer() != null) {
 						pass.buffer(VitrailMetalBridge.nativeHandle(one.buffer()), one.offset(), slot.index());
+						continue;
+					}
+
+					if (slot.kind() == MetalKernel.Kind.UNIFORM_BUFFER
+							|| slot.kind() == MetalKernel.Kind.STORAGE_BUFFER) {
+						pass.buffer(one.raw(), 0L, slot.index());
 						continue;
 					}
 
@@ -978,8 +989,11 @@ final class PackCompute implements AutoCloseable {
 				}
 
 				if (StorageBuffers.named(entry.name())) {
-					throw new IllegalStateException("storage buffer " + entry.name()
-							+ " is not served on Metal yet");
+					StorageBuffers.Bound storage = StorageBuffers.bound(entry.name());
+					if (storage == null) {
+						throw new IllegalStateException("Missing storage buffer " + entry.name());
+					}
+					return Bound.rawBuffer(MemorySegment.ofAddress(storage.buffer()));
 				}
 
 				GpuBufferSlice slice = this.block.currentBuffer().slice(0, Math.max(16, this.uniforms.size()));

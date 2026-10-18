@@ -2,30 +2,30 @@ package dev.vitrailmetal.render.storage;
 
 import dev.vitrailmetal.mixin.access.CommandEncoderAccessor;
 import dev.vitrailmetal.mixin.access.GpuDeviceAccessor;
-import dev.vitrailmetal.mixin.access.VulkanCommandEncoderAccessor;
 import dev.vitrailmetal.pack.model.BufferObject;
 import dev.vitrailmetal.pack.texture.CustomStorage;
 import dev.vitrailmetal.Vitrail;
+import dev.vitrailmetal.metal.MetalEncoderAccess;
+import dev.vitrailmetal.metal.MetalHost;
+import dev.vitrailmetal.metal.Objc;
+import com.metallum.render.VitrailMetalBridge;
+
+import java.lang.foreign.Arena;
+import java.lang.foreign.MemoryLayout;
+import java.lang.foreign.MemorySegment;
+import java.lang.invoke.MethodHandle;
+
+import static java.lang.foreign.ValueLayout.ADDRESS;
+import static java.lang.foreign.ValueLayout.JAVA_BYTE;
+import static java.lang.foreign.ValueLayout.JAVA_LONG;
 
 import com.mojang.blaze3d.buffers.GpuBuffer;
 import com.mojang.blaze3d.buffers.GpuBufferSlice;
 import com.mojang.blaze3d.systems.CommandEncoder;
 import com.mojang.blaze3d.systems.GpuDevice;
-import com.mojang.blaze3d.systems.GpuDeviceBackend;
 import com.mojang.blaze3d.systems.RenderPass;
 import com.mojang.blaze3d.systems.RenderSystem;
-import com.mojang.blaze3d.vulkan.VulkanCommandEncoder;
-import com.mojang.blaze3d.vulkan.VulkanDevice;
-import com.mojang.blaze3d.vulkan.VulkanUtils;
-import org.lwjgl.PointerBuffer;
-import org.lwjgl.system.MemoryStack;
-import org.lwjgl.util.vma.Vma;
-import org.lwjgl.util.vma.VmaAllocationCreateInfo;
-import org.lwjgl.vulkan.VK12;
-import org.lwjgl.vulkan.VkBufferCreateInfo;
-import org.lwjgl.vulkan.VkCommandBuffer;
 
-import java.nio.LongBuffer;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -121,9 +121,9 @@ public final class StorageBuffers implements AutoCloseable {
 			return;
 		}
 
-		VulkanDevice vulkan = vulkan();
+		MemorySegment metal = metal();
 		GpuDevice device = RenderSystem.tryGetDevice();
-		if (vulkan == null || device == null) {
+		if (metal == null || device == null) {
 			return;
 		}
 
@@ -132,7 +132,7 @@ public final class StorageBuffers implements AutoCloseable {
 		// through a resize has already destroyed the relative buffers and dropped them from the
 		// list, and a map left standing would hand a destroyed handle to the next descriptor push.
 		try {
-			allocate(vulkan, first, resized, screenWidth, screenHeight);
+			allocate(metal, first, resized, screenWidth, screenHeight);
 		} finally {
 			rebind();
 		}
@@ -142,7 +142,7 @@ public final class StorageBuffers implements AutoCloseable {
 		zero(device);
 	}
 
-	private void allocate(VulkanDevice vulkan, boolean first, boolean resized, int screenWidth,
+	private void allocate(MemorySegment metal, boolean first, boolean resized, int screenWidth,
 			int screenHeight) {
 		if (first) {
 			for (BufferObject buffer : this.declared.buffers()) {
@@ -150,7 +150,7 @@ public final class StorageBuffers implements AutoCloseable {
 					continue;
 				}
 
-				this.allocated.add(Allocated.create(vulkan, buffer, aligned(buffer.size())));
+				this.allocated.add(Allocated.create(metal, buffer, aligned(buffer.size())));
 				Vitrail.logger().info("storage buffer {}", buffer.describe());
 			}
 		}
@@ -159,7 +159,7 @@ public final class StorageBuffers implements AutoCloseable {
 			List<Allocated> kept = new ArrayList<>();
 			for (Allocated buffer : this.allocated) {
 				if (buffer.relative) {
-					buffer.destroy(vulkan);
+					buffer.destroy();
 				} else {
 					kept.add(buffer);
 				}
@@ -175,7 +175,7 @@ public final class StorageBuffers implements AutoCloseable {
 				long bytes = aligned((long) (screenWidth * buffer.scaleX())
 						* (long) (screenHeight * buffer.scaleY())
 						* buffer.size());
-				this.allocated.add(Allocated.create(vulkan, buffer, Math.max(bytes, 4L)));
+				this.allocated.add(Allocated.create(metal, buffer, Math.max(bytes, 4L)));
 				Vitrail.logger().info("storage buffer {} at {} bytes", buffer.describe(), bytes);
 			}
 		}
@@ -240,30 +240,40 @@ public final class StorageBuffers implements AutoCloseable {
 	 * bandwidth-bound write with no per-cell work behind it, and it lands on the frame that
 	 * allocates the buffer rather than on one drawing a world.
 	 */
+	private static final MethodHandle FILL_BUFFER = Objc.handle(null, ADDRESS,
+			MemoryLayout.structLayout(JAVA_LONG, JAVA_LONG), JAVA_BYTE);
+
 	private void zero(GpuDevice device) {
 		CommandEncoder encoder = device.createCommandEncoder();
 		GpuRecording.endPass(encoder);
-		VkCommandBuffer commands = commands(encoder);
-		if (commands == null) {
+		Object backend = ((CommandEncoderAccessor) encoder).vitrail$backend();
+		if (!(backend instanceof MetalEncoderAccess access)) {
 			return;
 		}
 
-		boolean filled = false;
-		for (Allocated buffer : this.allocated) {
-			if (buffer.zeroed) {
-				continue;
+		MemorySegment blit = null;
+		try (Arena arena = Arena.ofConfined()) {
+			for (Allocated buffer : this.allocated) {
+				if (buffer.zeroed) {
+					continue;
+				}
+				if (blit == null) {
+					blit = access.vitrail$blit().handle();
+				}
+				MemorySegment range = arena.allocate(MemoryLayout.structLayout(JAVA_LONG, JAVA_LONG));
+				range.set(JAVA_LONG, 0, 0L);
+				range.set(JAVA_LONG, 8, buffer.bytes);
+				FILL_BUFFER.invokeExact(blit, Objc.sel("fillBuffer:range:value:"), MemorySegment.ofAddress(buffer.buffer), range,
+						(byte) 0);
+				buffer.zeroed = true;
+				Vitrail.logger().info("storage buffer {} zeroed whole at {} bytes",
+						buffer.declared.describe(), buffer.bytes);
 			}
-
-			VK12.vkCmdFillBuffer(commands, buffer.buffer, 0L, buffer.bytes, 0);
-			buffer.zeroed = true;
-			filled = true;
-			Vitrail.logger().info("storage buffer {} zeroed whole at {} bytes",
-					buffer.declared.describe(), buffer.bytes);
-		}
-
-		if (filled) {
-			try (MemoryStack stack = MemoryStack.stackPush()) {
-				GpuRecording.afterTransfer(commands, stack);
+		} catch (Throwable e) {
+			throw new IllegalStateException("zeroing storage buffers", e);
+		} finally {
+			if (blit != null) {
+				access.vitrail$endEncoder();
 			}
 		}
 	}
@@ -272,22 +282,13 @@ public final class StorageBuffers implements AutoCloseable {
 		return Math.max(4L, (size + 3L) & ~3L);
 	}
 
-	private static VkCommandBuffer commands(CommandEncoder encoder) {
-		return ((CommandEncoderAccessor) encoder).vitrail$backend() instanceof VulkanCommandEncoder vulkan
-				? ((VulkanCommandEncoderAccessor) vulkan).vitrail$commandBuffer()
-				: null;
-	}
-
 	@Override
 	public void close() {
 		if (current == this) {
 			current = none();
 		}
 
-		VulkanDevice vulkan = vulkan();
-		if (vulkan != null) {
-			this.allocated.forEach(buffer -> buffer.destroy(vulkan));
-		}
+		this.allocated.forEach(Allocated::destroy);
 
 		this.allocated.clear();
 		this.bindings = Map.of();
@@ -300,65 +301,48 @@ public final class StorageBuffers implements AutoCloseable {
 		this.lastHeight = 0;
 	}
 
-	private static VulkanDevice vulkan() {
+	private static MemorySegment metal() {
 		GpuDevice device = RenderSystem.tryGetDevice();
-		if (device == null) {
+		if (device == null || !MetalHost.isMetal(device)) {
 			return null;
 		}
 
-		GpuDeviceBackend backend = ((GpuDeviceAccessor) device).vitrail$backend();
-		return backend instanceof VulkanDevice vulkan ? vulkan : null;
+		return VitrailMetalBridge.device(((GpuDeviceAccessor) device).vitrail$backend()).handle();
 	}
 
 	private static final class Allocated {
-
 		private final BufferObject declared;
 		private final boolean relative;
 		private final long bytes;
+		/** The address of the Metal buffer, private to the GPU. */
 		private long buffer;
-		private long allocation;
 		private boolean zeroed;
 
-		private Allocated(BufferObject declared, boolean relative, long bytes, long buffer,
-				long allocation) {
+		private Allocated(BufferObject declared, boolean relative, long bytes, long buffer) {
 			this.declared = declared;
 			this.relative = relative;
 			this.bytes = bytes;
 			this.buffer = buffer;
-			this.allocation = allocation;
 		}
 
-		private static Allocated create(VulkanDevice vulkan, BufferObject declared, long bytes) {
-			try (MemoryStack stack = MemoryStack.stackPush()) {
-				VkBufferCreateInfo bufferInfo = VkBufferCreateInfo.calloc(stack).sType$Default();
-				bufferInfo.size(bytes);
-				bufferInfo.usage(VK12.VK_BUFFER_USAGE_STORAGE_BUFFER_BIT
-						| VK12.VK_BUFFER_USAGE_TRANSFER_DST_BIT);
-				bufferInfo.sharingMode(VK12.VK_SHARING_MODE_EXCLUSIVE);
-				VmaAllocationCreateInfo allocationInfo = VmaAllocationCreateInfo.calloc(stack);
-				allocationInfo.usage(8);
-				LongBuffer bufferPtr = stack.callocLong(1);
-				PointerBuffer allocationPtr = stack.callocPointer(1);
-				VulkanUtils.crashIfFailure(vulkan,
-						Vma.vmaCreateBuffer(vulkan.vma(), bufferInfo, allocationInfo, bufferPtr,
-								allocationPtr, null),
-						"storage buffer " + declared.index());
-				return new Allocated(declared, declared.relative(), bytes, bufferPtr.get(0),
-						allocationPtr.get(0));
+		/** {@code MTLResourceStorageModePrivate}. */
+		private static final long PRIVATE = 2L << 4;
+
+		private static Allocated create(MemorySegment metal, BufferObject declared, long bytes) {
+			MemorySegment made = Objc.ptr(metal, "newBufferWithLength:options:",
+					MemorySegment.ofAddress(bytes), MemorySegment.ofAddress(PRIVATE));
+			if (Objc.nil(made)) {
+				throw new IllegalStateException("Metal gave no storage buffer " + declared.index()
+						+ " of " + bytes + " bytes");
 			}
+			return new Allocated(declared, declared.relative(), bytes, made.address());
 		}
 
-		/**
-		 * Deferred like the images: two frames may still hold descriptors naming this buffer, and
-		 * freeing under them is the settings-change device loss.
-		 */
-		private void destroy(VulkanDevice vulkan) {
+		private void destroy() {
 			long buffer = this.buffer;
-			long allocation = this.allocation;
 			this.buffer = 0L;
-			this.allocation = 0L;
 			if (buffer != 0L) {
-				GpuRecording.destroyLater(() -> Vma.vmaDestroyBuffer(vulkan.vma(), buffer, allocation));
+				GpuRecording.destroyLater(() -> Objc.release(MemorySegment.ofAddress(buffer)));
 			}
 		}
 	}

@@ -7,6 +7,9 @@ import com.metallum.mtl.MTLRenderCommandEncoder;
 import com.mojang.blaze3d.textures.GpuTextureView;
 import dev.vitrailmetal.metal.MultiTarget;
 import dev.vitrailmetal.metal.SamplerSlots;
+import dev.vitrailmetal.metal.Objc;
+import dev.vitrailmetal.render.storage.StorageBuffers;
+import com.metallum.mtl.MTLBuffer;
 import dev.vitrailmetal.render.storage.StorageImages;
 import com.metallum.render.VitrailMetalBridge;
 import dev.vitrailmetal.metal.MetalHost;
@@ -182,6 +185,28 @@ public abstract class MetalRenderPassMixin implements MultiTarget.Pass {
 			if (slot >= 0 && slot < 16) {
 				encoder.setFragmentSamplerState(sampler, slot);
 			}
+		}
+	}
+
+	/**
+	 * A pack's storage buffer, bound by name over the placeholder the pass was handed for it, the
+	 * way {@code VulkanRenderPassMixin} puts the real buffer into the descriptor on Vulkan.
+	 */
+	@Redirect(method = "pushDescriptor", require = 1,
+			at = @At(value = "INVOKE",
+					target = "Lcom/metallum/render/MetalRenderPass;bindBuffer("
+							+ "Lcom/metallum/mtl/MTLRenderCommandEncoder;Lcom/metallum/mtl/MTLBuffer;JJI)V"))
+	private void vitrail$bindBuffer(MTLRenderCommandEncoder encoder, MTLBuffer buffer, long offset,
+			long index, int stageMask) {
+		String name = this.vitrail$pushing;
+		StorageBuffers.Bound storage = name == null ? null : StorageBuffers.bound(name);
+		MemorySegment handle = storage != null ? MemorySegment.ofAddress(storage.buffer()) : buffer.handle();
+		long at = storage != null ? 0L : offset;
+		if ((stageMask & STAGE_VERTEX) != 0) {
+			Objc.send(encoder.handle(), "setVertexBuffer:offset:atIndex:", handle, at, index);
+		}
+		if ((stageMask & STAGE_FRAGMENT) != 0) {
+			Objc.send(encoder.handle(), "setFragmentBuffer:offset:atIndex:", handle, at, index);
 		}
 	}
 }
