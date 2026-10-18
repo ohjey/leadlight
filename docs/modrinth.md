@@ -31,5 +31,5 @@ stage still work.
 
 ### Credits
 Leadlight is by OhJey, built on [Vitrail](https://github.com/avpbynf/Vitrail-Shaders) by avpbynf, and is
-LGPL-3.0, like Vitrail. It is an independent project, not affiliated with Vitrail, Metallum, Iris
+LGPL-3.0, like Vitrail; source at https://github.com/ohjey/leadlight. It is an independent project, not affiliated with Vitrail, Metallum, Iris
 or OptiFine.

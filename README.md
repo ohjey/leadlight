@@ -138,7 +138,7 @@ Leadlight is by OhJey. It is a modified version of Vitrail by avpbynf, and is di
 the same licence, the GNU Lesser General Public License version 3 only: see [LICENSE](LICENSE) and
 [GPL-3.0.txt](GPL-3.0.txt). [NOTICE](NOTICE) says what was changed from Vitrail and credits the
 material Vitrail reuses from Iris and other projects. The complete source of every release is in this
-repository.
+repository, https://github.com/ohjey/leadlight.
 
 Vitrail's own documentation is kept in `docs-upstream/`. It describes the Vulkan engine Leadlight
 is built on, and most of it applies unchanged.

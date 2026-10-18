@@ -10,7 +10,11 @@
 	"contributors": [
 		"avpbynf (Vitrail, the shader engine Leadlight is built on)"
 	],
-	"contact": {},
+	"contact": {
+		"homepage": "https://github.com/ohjey/leadlight",
+		"sources": "https://github.com/ohjey/leadlight",
+		"issues": "https://github.com/ohjey/leadlight/issues"
+	},
 	"license": "LGPL-3.0-only",
 	"icon": "leadlight.png",
 	"environment": "client",
