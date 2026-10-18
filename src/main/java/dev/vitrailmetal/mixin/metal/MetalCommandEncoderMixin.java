@@ -14,6 +14,9 @@ import com.mojang.blaze3d.textures.GpuTextureView;
 import dev.vitrailmetal.Vitrail;
 import dev.vitrailmetal.metal.MetalEncoderAccess;
 import dev.vitrailmetal.metal.MultiTarget;
+import dev.vitrailmetal.metal.Objc;
+import dev.vitrailmetal.render.MipmapCommands;
+import com.metallum.mtl.MTLBlitCommandEncoder;
 import org.joml.Vector4fc;
 import org.jspecify.annotations.Nullable;
 import org.spongepowered.asm.mixin.Final;
@@ -39,7 +42,7 @@ import java.util.Optional;
  * encoder that has them, and a multiple target pass carries on only in one with the same set.
  */
 @Mixin(targets = "com.metallum.render.MetalCommandEncoder", remap = false)
-public abstract class MetalCommandEncoderMixin implements MultiTarget.Encoder, MetalEncoderAccess {
+public abstract class MetalCommandEncoderMixin implements MultiTarget.Encoder, MetalEncoderAccess, MipmapCommands {
 
 	@Shadow
 	private MTLCommandEncoder currentEncoder;
@@ -70,6 +73,9 @@ public abstract class MetalCommandEncoderMixin implements MultiTarget.Encoder, M
 
 	@Shadow
 	abstract MTLCommandBuffer commandBuffer();
+
+	@Shadow
+	abstract MTLBlitCommandEncoder blitCommandEncoder();
 
 	@Inject(method = "createRenderPass", at = @At("RETURN"), require = 1)
 	private void vitrail$extraTargets(RenderPassDescriptor descriptor,
@@ -208,5 +214,30 @@ public abstract class MetalCommandEncoderMixin implements MultiTarget.Encoder, M
 	@Override
 	public void vitrail$endEncoder() {
 		this.endEncoder();
+	}
+
+	/**
+	 * Fills a mip chain the way {@code glGenerateMipmap} does, which on Metal is one blit command.
+	 * A depth format is refused, as Metal refuses it, and the caller then keeps its readers on the
+	 * base level.
+	 */
+	@Override
+	public boolean vitrail$generateMipmaps(GpuTexture texture) {
+		if (texture.getMipLevels() <= 1 || texture.isClosed() || texture.getFormat().hasDepthAspect()) {
+			return false;
+		}
+
+		VitrailMetalBridge.flushPendingClear(this, texture);
+		MTLBlitCommandEncoder blit = this.blitCommandEncoder();
+		Objc.send(blit.handle(), "generateMipmapsForTexture:", VitrailMetalBridge.nativeHandle(texture));
+		this.endEncoder();
+		VitrailMetalBridge.markContentsDirty(texture);
+		return true;
+	}
+
+	/** The pass's Metal encoder is opened lazily at its first draw, so there is none to move yet. */
+	@Override
+	public boolean vitrail$viewport(int width, int height) {
+		return false;
 	}
 }

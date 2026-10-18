@@ -26,6 +26,7 @@ import java.util.List;
  * pos                logs where the player is
  * view back          third person from behind (front, or first to go back)
  * hud off            hides the HUD (hud on shows it again)
+ * fps                logs the frame rate the game counted over the last second
  * quit               closes the game
  * </pre>
  */
@@ -118,6 +119,7 @@ public final class DebugScript {
 					minecraft.gui.hud.toggle();
 				}
 			}
+			case "fps" -> Vitrail.logger().info("debug script: {} fps", minecraft.getFps());
 			case "quit" -> minecraft.stop();
 			default -> Vitrail.logger().warn("debug script: unknown step {}", step);
 		}

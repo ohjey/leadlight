@@ -89,6 +89,7 @@
 		"metal.MetalCommandEncoderMixin",
 		"metal.MetalRenderPassInvoker",
 		"metal.MetalDrawContextMixin",
-		"metal.MetalGpuTextureMixin"
+		"metal.MetalGpuTextureMixin",
+		"metal.MetalDevicePipelinesMixin"
 	]
 }
