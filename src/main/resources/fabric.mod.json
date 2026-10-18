@@ -4,7 +4,9 @@
 	"version": "${mod_version}",
 	"name": "Leadlight",
 	"description": "OptiFine-format shader packs (Photon, Complementary, BSL, ...) on Metallum's Metal renderer for Apple silicon Macs, unmodified. Built on Vitrail by avpbynf.",
-	"authors": [],
+	"authors": [
+		"OhJey"
+	],
 	"contributors": [
 		"avpbynf (Vitrail, the shader engine Leadlight is built on)"
 	],

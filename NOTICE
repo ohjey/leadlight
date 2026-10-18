@@ -3,8 +3,9 @@ Leadlight: a modified version of Vitrail
 
 Leadlight is a modified version of Vitrail Shaders (https://github.com/avpbynf/Vitrail-Shaders,
 copyright avpbynf, LGPL-3.0-only), forked from the upstream commit recorded in UPSTREAM_COMMIT and
-changed from October 2026 to run on Metallum's Metal backend instead of Minecraft's Vulkan one. It
-is distributed under the same licence, LGPL-3.0-only, in LICENSE and GPL-3.0.txt.
+changed from October 2026 to run on Metallum's Metal backend instead of Minecraft's Vulkan one. The
+modifications are copyright 2026 OhJey. Leadlight is distributed under the same licence,
+LGPL-3.0-only, in LICENSE and GPL-3.0.txt.
 
 What was changed:
 

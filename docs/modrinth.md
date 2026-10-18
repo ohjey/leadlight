@@ -30,6 +30,6 @@ Geometry shaders (Metal has no geometry stage). Packs that only pass vertices th
 stage still work.
 
 ### Credits
-Leadlight is built on [Vitrail](https://github.com/avpbynf/Vitrail-Shaders) by avpbynf, and is
+Leadlight is by OhJey, built on [Vitrail](https://github.com/avpbynf/Vitrail-Shaders) by avpbynf, and is
 LGPL-3.0, like Vitrail. It is an independent project, not affiliated with Vitrail, Metallum, Iris
 or OptiFine.
