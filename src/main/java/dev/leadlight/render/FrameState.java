@@ -1,5 +1,7 @@
 package dev.leadlight.render;
 
+import dev.leadlight.Leadlight;
+
 import dev.leadlight.dh.DhDepth;
 import dev.leadlight.pack.id.NameIds;
 import dev.leadlight.pack.model.RenderStage;
@@ -77,6 +79,10 @@ import org.joml.Vector4fc;
  * image diverge from the one the pack was tuned on.
  */
 public final class FrameState implements WorldState {
+
+	/** Whether the shadow map's extent has been said once for this pack. */
+	private boolean shadowExtentLogged;
+
 
 	/** OptiFine's counter wraps at an hour, which keeps a float's precision usable for noise. */
 	private static final float COUNTER_WRAP = 3600.0F;
@@ -527,6 +533,14 @@ public final class FrameState implements WorldState {
 		// Counted where the decision is read rather than where it is made, so one frame is counted
 		// once and only a frame that reached the decision counts at all.
 		PassTimings.shadowMap(ShadowAmortisation.missedLastPlan());
+
+		if (!this.shadowExtentLogged) {
+			this.shadowExtentLogged = true;
+			Leadlight.logger().info("The shadow map spans {} blocks either side of the camera, near plane {}, "
+					+ "far plane {}, sun path rotation {}", this.directives.shadowDistance(),
+					this.directives.shadowNearPlane(), this.directives.shadowFarPlane(),
+					this.directives.sunPathRotation());
+		}
 
 		this.view.advanceShadow(shadowAngle, this.directives.sunPathRotation(),
 				this.directives.shadowIntervalSize(), this.shift.unshifted(),
