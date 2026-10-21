@@ -2551,8 +2551,15 @@ public final class GlslTranslator {
 			// {@code #if defined} is a question about a macro rather than code, and renaming it
 			// would ask about a name nobody defines. The macro's OWN name is already out, being a
 			// naming directive's first identifier.
+			//
+			// And only where the unit declares the name itself. A body can name the builtin as well:
+			// Photon 1.4 writes {@code #define BLOOM_UPSAMPLING_FILTER texture} and calls
+			// {@code BLOOM_UPSAMPLING_FILTER(colortex0, uv)}, which is the function texture, and
+			// renaming it there called an ofTexture nothing declares. Pegasus declares its sampler,
+			// Photon declares none, and that declaration is the whole difference between the two.
 			String named = LegacyGlsl.RESERVED_NAMES.get(name);
 			if (named != null && "define".equals(directive)
+					&& this.declaredNames.contains(name)
 					&& !this.macroParameterTokens.contains(index)
 					&& this.tokens.callOpener(index) < 0) {
 				this.tokens.replace(index, named);

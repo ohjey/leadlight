@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.1.1
+
+- Fixed Photon 1.4 failing to load (`'ofTexture' : no matching overloaded function found`). A pack
+  macro that stands for the `texture()` function, such as Photon 1.4's
+  `#define BLOOM_UPSAMPLING_FILTER texture`, was renamed as if it were the old `texture` sampler.
+  The name is now only renamed where the pack declares a variable by that name.
+- The shader pack's shadow map extent is logged once per load.
+
 ## 0.1.0 (first release)
 
 Leadlight runs OptiFine-format shader packs, unmodified, on Metallum's Metal renderer, for
