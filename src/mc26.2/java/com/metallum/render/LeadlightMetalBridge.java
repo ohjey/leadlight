@@ -44,6 +44,24 @@ public final class LeadlightMetalBridge {
 	}
 
 	/** The Metal buffer behind a buffer, as it stands now (a dynamic one changes backing). */
+	/** The {@code id<MTLDevice>} behind Metallum's device backend. */
+	public static MemorySegment deviceHandle(Object deviceBackend) {
+		return device(deviceBackend).handle();
+	}
+
+	/**
+	 * Compiles one MSL function on Metallum's device, through Metallum's own compile so the options
+	 * this engine puts on every library ({@code MTLDeviceMixin}) apply; NULL where it did not compile.
+	 */
+	public static MemorySegment newFunction(Object deviceBackend, String msl, String entry) {
+		return device(deviceBackend).newFunction(msl, entry);
+	}
+
+	/** The {@code MTLPixelFormat} Metallum allocates a texture of this format as. */
+	public static long pixelFormat(com.mojang.blaze3d.GpuFormat format) {
+		return com.metallum.mtl.MTLPixelFormat.from(format).value;
+	}
+
 	public static MemorySegment nativeHandle(GpuBuffer buffer) {
 		return ((MetalGpuBuffer) buffer).nativeHandle();
 	}

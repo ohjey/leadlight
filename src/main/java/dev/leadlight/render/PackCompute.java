@@ -35,7 +35,6 @@ import com.mojang.blaze3d.textures.FilterMode;
 import com.mojang.blaze3d.textures.GpuSampler;
 import com.mojang.blaze3d.textures.GpuTexture;
 import com.mojang.blaze3d.textures.GpuTextureView;
-import com.metallum.mtl.MTLDevice;
 import com.metallum.render.LeadlightMetalBridge;
 import dev.leadlight.metal.MetalCompute;
 import dev.leadlight.metal.MetalHost;
@@ -397,7 +396,7 @@ final class PackCompute implements AutoCloseable {
 		// still have the geometry's render pass object open over it.
 		GeometryHold.flush(() -> "the compute dispatch at " + program);
 		GpuRecording.endPass(encoder);
-		MTLDevice metal = metal(device);
+		Object metal = metal(device);
 		if (metal == null) {
 			return;
 		}
@@ -439,7 +438,7 @@ final class PackCompute implements AutoCloseable {
 		// encoder no longer has, which is a crash at the next flush and not here.
 		GeometryHold.flush(() -> "the shadow compute dispatch");
 		GpuRecording.endPass(encoder);
-		MTLDevice metal = metal(device);
+		Object metal = metal(device);
 		if (metal == null) {
 			return;
 		}
@@ -504,9 +503,9 @@ final class PackCompute implements AutoCloseable {
 	}
 
 	/** The Metal device, or null where the game is not on Metallum. */
-	private static @Nullable MTLDevice metal(GpuDevice device) {
+	private static @Nullable Object metal(GpuDevice device) {
 		GpuDeviceBackend backend = ((GpuDeviceAccessor) device).leadlight$backend();
-		return MetalHost.isMetal(device) ? LeadlightMetalBridge.device(backend) : null;
+		return MetalHost.isMetal(device) ? backend : null;
 	}
 
 	/**
@@ -679,7 +678,7 @@ final class PackCompute implements AutoCloseable {
 		 * @param depth   the depth the pass this compute hangs off reads, or null for a shadow compute
 		 * @param distant the far terrain's depth on the same terms
 		 */
-		private void dispatch(MTLDevice metal, CommandEncoder encoder, PackValues values,
+		private void dispatch(Object metal, CommandEncoder encoder, PackValues values,
 				ColorTargets targets, int width, int height, TargetSchedule.Bound step,
 				GpuTextureView depth, GpuTextureView distant) {
 			if (!this.compiled) {
@@ -748,7 +747,7 @@ final class PackCompute implements AutoCloseable {
 			}
 		}
 
-		private void compile(MTLDevice metal) {
+		private void compile(Object metal) {
 			this.compiled = true;
 			TranslatedUnit unit = this.compute.loaded().program().stages().get(ProgramStage.COMPUTE);
 			if (unit == null) {

@@ -1,0 +1,23 @@
+{
+	"required": true,
+	"minVersion": "0.8.5",
+	"package": "dev.leadlight.mixin.metal",
+	"compatibilityLevel": "JAVA_21",
+	"injectors": {
+		"defaultRequire": 1
+	},
+	"client": [
+		"MetalBackendMixin",
+		"MetalDeviceSourceMixin",
+		"MetalCrossShaderCompilerMixin",
+		"MetalCompiledRenderPipelineMixin",
+		"MetalRenderPassMixin",
+		"MetalCommandEncoderMixin",
+		"MetalRenderPassInvoker",
+		"MetalDrawContextMixin",
+		"MetalGpuTextureMixin",
+		"MetalDevicePipelinesMixin",
+		"MTLCommandBufferMixin",
+		"MTLDeviceMixin"
+	]
+}

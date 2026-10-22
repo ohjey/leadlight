@@ -1,6 +1,5 @@
 package dev.leadlight.metal;
 
-import com.metallum.objc.AutoreleasePool;
 import com.metallum.render.LeadlightMetalBridge;
 import com.mojang.blaze3d.systems.CommandEncoder;
 import com.mojang.blaze3d.textures.GpuTexture;
@@ -19,10 +18,10 @@ import java.util.Collection;
 public final class MetalCompute implements AutoCloseable {
 
 	private final MetalEncoderAccess access;
-	private final AutoreleasePool pool;
+	private final MemorySegment pool;
 	private final MemorySegment encoder;
 
-	private MetalCompute(MetalEncoderAccess access, AutoreleasePool pool, MemorySegment encoder) {
+	private MetalCompute(MetalEncoderAccess access, MemorySegment pool, MemorySegment encoder) {
 		this.access = access;
 		this.pool = pool;
 		this.encoder = encoder;
@@ -43,9 +42,9 @@ public final class MetalCompute implements AutoCloseable {
 		}
 
 		access.leadlight$endEncoder();
-		AutoreleasePool pool = AutoreleasePool.push();
-		MemorySegment encoder = Objc.ptr(access.leadlight$commandBuffer().handle(), "computeCommandEncoder");
-		Objc.send(encoder, "waitForFence:", access.leadlight$fence().handle());
+		MemorySegment pool = Objc.autoreleasePush();
+		MemorySegment encoder = Objc.ptr(access.leadlight$commandBuffer(), "computeCommandEncoder");
+		Objc.send(encoder, "waitForFence:", access.leadlight$fence());
 		return new MetalCompute(access, pool, encoder);
 	}
 
@@ -76,10 +75,10 @@ public final class MetalCompute implements AutoCloseable {
 	@Override
 	public void close() {
 		try {
-			Objc.send(this.encoder, "updateFence:", this.access.leadlight$fence().handle());
+			Objc.send(this.encoder, "updateFence:", this.access.leadlight$fence());
 			Objc.send(this.encoder, "endEncoding");
 		} finally {
-			this.pool.close();
+			Objc.autoreleasePop(this.pool);
 		}
 	}
 }

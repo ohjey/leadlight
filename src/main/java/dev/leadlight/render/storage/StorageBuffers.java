@@ -258,7 +258,7 @@ public final class StorageBuffers implements AutoCloseable {
 					continue;
 				}
 				if (blit == null) {
-					blit = access.leadlight$blit().handle();
+					blit = access.leadlight$blit();
 				}
 				MemorySegment range = arena.allocate(MemoryLayout.structLayout(JAVA_LONG, JAVA_LONG));
 				range.set(JAVA_LONG, 0, 0L);
@@ -307,7 +307,7 @@ public final class StorageBuffers implements AutoCloseable {
 			return null;
 		}
 
-		return LeadlightMetalBridge.device(((GpuDeviceAccessor) device).leadlight$backend()).handle();
+		return LeadlightMetalBridge.deviceHandle(((GpuDeviceAccessor) device).leadlight$backend());
 	}
 
 	private static final class Allocated {

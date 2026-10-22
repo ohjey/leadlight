@@ -54,7 +54,7 @@ public final class MetalHost {
 		}
 
 		GpuDevice device = RenderSystem.getDevice();
-		MemorySegment metal = LeadlightMetalBridge.device(((GpuDeviceAccessor) device).leadlight$backend()).handle();
+		MemorySegment metal = LeadlightMetalBridge.deviceHandle(((GpuDeviceAccessor) device).leadlight$backend());
 		MemorySegment descriptor = Objc.ptr(Objc.ptr(Objc.cls("MTLSamplerDescriptor"), "alloc"), "init");
 		Objc.send(descriptor, "setMinFilter:", 1L);
 		Objc.send(descriptor, "setMagFilter:", 1L);

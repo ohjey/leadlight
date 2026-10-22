@@ -266,8 +266,7 @@ final class EntityProgram extends FamilyProgram {
 	 */
 	private static DepthStencilState overlay(RenderPipeline game) {
 		DepthStencilState state = game.getDepthStencilState();
-		boolean blends = game.getColorTargetState() != null
-				&& game.getColorTargetState().blendFunction().isPresent();
+		boolean blends = GraphicsApi.colorTarget(game).blendFunction().isPresent();
 		if (state == null || !blends || state.depthTest() != CompareOp.GREATER_THAN_OR_EQUAL) {
 			return state;
 		}

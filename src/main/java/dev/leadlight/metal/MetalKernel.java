@@ -1,6 +1,6 @@
 package dev.leadlight.metal;
 
-import com.metallum.mtl.MTLDevice;
+import com.metallum.render.LeadlightMetalBridge;
 import dev.leadlight.Leadlight;
 import org.jspecify.annotations.Nullable;
 import org.lwjgl.PointerBuffer;
@@ -87,11 +87,11 @@ public final class MetalKernel {
 	/**
 	 * Builds the kernel, or answers null with the reason logged.
 	 *
-	 * @param device the Metal device
+	 * @param device Metallum's device backend
 	 * @param spirv  the module, its bindings already set to their place in the entry list
 	 * @param label  what the log calls it
 	 */
-	public static @Nullable MetalKernel build(MTLDevice device, ByteBuffer spirv, String label) {
+	public static @Nullable MetalKernel build(Object device, ByteBuffer spirv, String label) {
 		String msl;
 		List<Slot> slots = new ArrayList<>();
 		int[] local = {1, 1, 1};
@@ -145,7 +145,7 @@ public final class MetalKernel {
 
 		Matcher entry = ENTRY.matcher(msl);
 		String name = entry.find() ? entry.group(1) : "main0";
-		MemorySegment function = device.newFunction(msl, name);
+		MemorySegment function = LeadlightMetalBridge.newFunction(device, msl, name);
 		if (Objc.nil(function)) {
 			Leadlight.logger().warn("Metal compute {}: the MSL did not compile (Metallum logged why)", label);
 			return null;
@@ -155,7 +155,7 @@ public final class MetalKernel {
 		try (Arena arena = Arena.ofConfined()) {
 			MemorySegment errorOut = arena.allocate(ADDRESS);
 			errorOut.set(ADDRESS, 0, MemorySegment.NULL);
-			pipeline = Objc.ptr(device.handle(), "newComputePipelineStateWithFunction:error:",
+			pipeline = Objc.ptr(LeadlightMetalBridge.deviceHandle(device), "newComputePipelineStateWithFunction:error:",
 					function, errorOut);
 			if (Objc.nil(pipeline)) {
 				Leadlight.logger().warn("Metal compute {}: no pipeline: {}", label, Objc.error(errorOut));

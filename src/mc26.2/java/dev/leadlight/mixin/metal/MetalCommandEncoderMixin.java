@@ -234,13 +234,13 @@ public abstract class MetalCommandEncoderMixin implements MultiTarget.Encoder, M
 	}
 
 	@Override
-	public MTLFence leadlight$fence() {
-		return this.fence;
+	public MemorySegment leadlight$fence() {
+		return this.fence.handle();
 	}
 
 	@Override
-	public MTLCommandBuffer leadlight$commandBuffer() {
-		return this.commandBuffer();
+	public MemorySegment leadlight$commandBuffer() {
+		return this.commandBuffer().handle();
 	}
 
 	@Override
@@ -274,7 +274,7 @@ public abstract class MetalCommandEncoderMixin implements MultiTarget.Encoder, M
 	}
 
 	@Override
-	public MTLBlitCommandEncoder leadlight$blit() {
-		return this.blitCommandEncoder();
+	public MemorySegment leadlight$blit() {
+		return this.blitCommandEncoder().handle();
 	}
 }

@@ -163,6 +163,28 @@ public final class Objc {
 		}
 	}
 
+	private static final MethodHandle AUTORELEASE_PUSH = LINKER.downcallHandle(
+			RUNTIME.find("objc_autoreleasePoolPush").orElseThrow(), FunctionDescriptor.of(ADDRESS));
+	private static final MethodHandle AUTORELEASE_POP = LINKER.downcallHandle(
+			RUNTIME.find("objc_autoreleasePoolPop").orElseThrow(), FunctionDescriptor.ofVoid(ADDRESS));
+
+	/** Opens an autorelease pool on this thread; {@link #autoreleasePop} closes it. */
+	public static MemorySegment autoreleasePush() {
+		try {
+			return (MemorySegment) AUTORELEASE_PUSH.invokeExact();
+		} catch (Throwable e) {
+			throw fail("objc_autoreleasePoolPush", e);
+		}
+	}
+
+	public static void autoreleasePop(MemorySegment pool) {
+		try {
+			AUTORELEASE_POP.invokeExact(pool);
+		} catch (Throwable e) {
+			throw fail("objc_autoreleasePoolPop", e);
+		}
+	}
+
 	public static boolean nil(MemorySegment handle) {
 		return handle == null || handle.address() == 0L;
 	}

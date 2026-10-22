@@ -1,6 +1,5 @@
 package dev.leadlight.render.storage;
 
-import com.metallum.mtl.MTLPixelFormat;
 import com.metallum.render.LeadlightMetalBridge;
 import com.mojang.blaze3d.systems.CommandEncoder;
 import com.mojang.blaze3d.systems.GpuDevice;
@@ -290,7 +289,7 @@ public final class StorageImages implements AutoCloseable {
 			return;
 		}
 
-		MemorySegment blit = access.leadlight$blit().handle();
+		MemorySegment blit = access.leadlight$blit();
 		try {
 			for (Allocated image : images) {
 				empty(blit, image);
@@ -388,7 +387,7 @@ public final class StorageImages implements AutoCloseable {
 			return;
 		}
 
-		MemorySegment blit = access.leadlight$blit().handle();
+		MemorySegment blit = access.leadlight$blit();
 		try {
 			for (Allocated image : this.allocated) {
 				if (Objc.nil(image.scratch)) {
@@ -455,11 +454,11 @@ public final class StorageImages implements AutoCloseable {
 			return null;
 		}
 
-		return LeadlightMetalBridge.device(((GpuDeviceAccessor) device).leadlight$backend()).handle();
+		return LeadlightMetalBridge.deviceHandle(((GpuDeviceAccessor) device).leadlight$backend());
 	}
 
 	private static long pixelFormat(TargetFormat format) {
-		return MTLPixelFormat.from(GpuFormats.of(format)).value;
+		return LeadlightMetalBridge.pixelFormat(GpuFormats.of(format));
 	}
 
 	private static final class Allocated {

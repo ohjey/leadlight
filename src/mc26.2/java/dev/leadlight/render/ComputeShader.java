@@ -194,7 +194,7 @@ public final class ComputeShader {
 	 * The same road as {@link #build}, cache and zeroed locals included, ending in a Metal kernel
 	 * rather than a Vulkan shader module.
 	 */
-	public static @Nullable MetalCompiled buildMetal(com.metallum.mtl.MTLDevice device, String label,
+	public static @Nullable MetalCompiled buildMetal(Object device, String label,
 			String source, String stage, Function<String, @Nullable ByteBuffer> compile) throws Exception {
 		long began = System.nanoTime();
 		IntermediaryShaderModule module = null;

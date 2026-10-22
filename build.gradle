@@ -2,6 +2,21 @@ plugins {
 	id 'net.fabricmc.fabric-loom' version "${loom_version}"
 }
 
+// Which game this build is for, and everything that moves with it, out of versions/<game>.properties.
+// Sources that differ between the two games are whole files under src/mc<game>/ beside src/main/,
+// added to the build rather than laid over it, as upstream Vitrail lays them out.
+def targetGame = (project.findProperty('minecraft') ?: '26.2').toString()
+def versionFile = file("versions/${targetGame}.properties")
+if (!versionFile.isFile()) {
+	throw new GradleException("No versions/${targetGame}.properties: this mod builds for 26.2 and 26.3")
+}
+def versionProperties = new Properties()
+versionFile.withInputStream { versionProperties.load(it) }
+versionProperties.each { key, value -> project.ext.set(key.toString(), value.toString()) }
+
+// Each game builds into a directory of its own, so switching does not throw the other one's away.
+layout.buildDirectory = layout.projectDirectory.dir("build/mc${targetGame}")
+
 version = "${project.mod_version}+mc${project.minecraft_version}"
 group = project.maven_group
 
@@ -42,8 +57,8 @@ dependencies {
 	// Dev client only, on request (-PwithEtf): the entity texture and model mods Fresh Animations
 	// needs, to check the emissive overlays they draw.
 	if (project.hasProperty('withEtf')) {
-		runtimeOnly "maven.modrinth:entitytexturefeatures:7.2.6-fabric-26.2"
-		runtimeOnly "maven.modrinth:entity-model-features:3.3.12-fabric-26.2"
+		runtimeOnly "maven.modrinth:entitytexturefeatures:${project.etf_version}"
+		runtimeOnly "maven.modrinth:entity-model-features:${project.emf_version}"
 	}
 
 	testImplementation platform("org.junit:junit-bom:${project.junit_version}")
@@ -77,6 +92,58 @@ tasks.withType(JavaExec).matching { it.name == 'runClient' }.configureEach {
 	}
 }
 
+def versionSources = "src/mc${targetGame}"
+sourceSets.main.java.srcDir("${versionSources}/java")
+sourceSets.main.resources.srcDir("${versionSources}/resources")
+
+// A game that moved classes the shared sources name is given those sources with the names
+// rewritten, rather than a copy kept by hand: versions/<game>.remap lists the moves, one class per
+// line, Blaze3D's classes to Renderpearl's for 26.3. Upstream Vitrail's rule, applied line by line
+// to a copy under build/, so a compiler error on the copy is on the line of the file it came from.
+// The dotted name in code and strings, the slashed one in descriptors (how a mixin target names a
+// class), and a name only ever matched whole.
+def remapFile = file("versions/${targetGame}.remap")
+if (remapFile.isFile()) {
+	def moves = [:]
+	remapFile.eachLine("UTF-8") { line ->
+		def text = line.trim()
+		if (text.isEmpty() || text.startsWith("#")) {
+			return
+		}
+		def names = text.split(/\s+/)
+		if (names.length != 2) {
+			throw new GradleException("${remapFile.name}: '${text}' is not a class and where it moved to")
+		}
+		moves[names[0]] = names[1]
+		moves[names[0].replace(".", "/")] = names[1].replace(".", "/")
+		moves["L" + names[0].replace(".", "/")] = "L" + names[1].replace(".", "/")
+	}
+	def quoted = { names -> names.sort { -it.length() }
+			.collect { java.util.regex.Pattern.quote(it) }.join("|") }
+	def pattern = java.util.regex.Pattern.compile(
+			'(?:' + quoted(moves.keySet().findAll { it.startsWith("L") }) + ')(?=[;$<])'
+			+ '|(?<![\\w$])(?:' + quoted(moves.keySet().findAll { !it.startsWith("L") })
+			+ ')(?!\\w)')
+	def remapSources = tasks.register("remapSources", Sync) {
+		description = "Rewrites the shared sources onto the class names of Minecraft ${targetGame}."
+		inputs.property("moves", moves)
+		from("src/main/java")
+		into(layout.buildDirectory.dir("generated/sources/remapped/java"))
+		filteringCharset = "UTF-8"
+		filter { String line ->
+			def matcher = pattern.matcher(line)
+			def rewritten = new StringBuilder()
+			while (matcher.find()) {
+				matcher.appendReplacement(rewritten,
+						java.util.regex.Matcher.quoteReplacement(moves[matcher.group()]))
+			}
+			matcher.appendTail(rewritten)
+			rewritten.toString()
+		}
+	}
+	sourceSets.main.java.srcDirs = [remapSources, "${versionSources}/java"]
+}
+
 processResources {
 	def metadata = [
 		mod_id: project.mod_id,
@@ -101,6 +168,7 @@ processResources {
 tasks.withType(JavaCompile).configureEach {
 	it.options.encoding = 'UTF-8'
 	it.options.release = 25
+	it.options.compilerArgs += ['-Xmaxerrs', '10000']
 }
 
 java {

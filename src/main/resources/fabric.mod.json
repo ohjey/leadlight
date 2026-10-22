@@ -30,7 +30,8 @@
 		"leadlight.mixins.json",
 		"leadlight-game.mixins.json",
 		"leadlight-fabric.mixins.json",
-		"leadlight-dh.mixins.json"
+		"leadlight-dh.mixins.json",
+		"leadlight-metal.mixins.json"
 	],
 	"depends": {
 		"fabricloader": ">=${fabric_loader_min_version}",
