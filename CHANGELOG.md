@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.2.0
+
+- Minecraft 26.3 with Metallum 0.0.25. Each game has its own jar: `leadlight-0.2.0+mc26.2.jar`
+  needs Metallum 0.0.24, `leadlight-0.2.0+mc26.3.jar` needs Metallum 0.0.25.
+- On 26.3 the pack's terrain programs draw the chunks. Sodium for 26.3 takes its OpenGL draw path on
+  any device that is not Vulkan, Metallum's included, and that had switched the pack's chunk
+  programs and its terrain shadows off.
+- On 26.3, pipelines are compiled ahead of their first draw on Metal too. Metallum 0.0.25's shader
+  function cache is made safe to fill from several threads for this.
+- Distant Horizons on 26.3 is left to Metallum 0.0.25, which now makes the same fix Leadlight
+  makes on 26.2.
+
 ## 0.1.1
 
 - Fixed Photon 1.4 failing to load (`'ofTexture' : no matching overloaded function found`). A pack

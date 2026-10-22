@@ -25,6 +25,7 @@ base {
 }
 
 repositories {
+	mavenCentral()
 	exclusiveContent {
 		forRepository {
 			maven {
@@ -43,9 +44,15 @@ dependencies {
 	implementation "net.fabricmc:fabric-loader:${project.loader_version}"
 
 	// Metallum is the Metal backend this engine draws through. Its render classes are reached
-	// directly (from dev.vitrailmetal.metal and from com.metallum.render.VitrailMetalBridge), so it is
+	// directly (from dev.leadlight.metal and from com.metallum.render.LeadlightMetalBridge), so it is
 	// on the compile classpath as well as the dev client's.
 	implementation "maven.modrinth:metallum-mc:${project.metallum_version}"
+
+	// From 0.0.25 Metallum wraps Metal in the metal-jvm bindings and ships them inside its own jar,
+	// which puts them on the game's classpath but not on the compiler's.
+	if (project.hasProperty('metaljvm_version')) {
+		compileOnly "io.github.kokodio:metal-jvm:${project.metaljvm_version}"
+	}
 
 	// Sodium draws the terrain, and the engine hooks its chunk renderer.
 	implementation "maven.modrinth:sodium:${project.sodium_version}"
@@ -69,6 +76,8 @@ dependencies {
 loom {
 	runs {
 		client {
+			// Each game keeps its own world, options and mods: run/ for 26.2, run-<game>/ otherwise.
+			runDir = targetGame == '26.2' ? 'run' : "run-${targetGame}"
 			// Apple's Metal API validation, on request: -PmetalValidation
 			if (project.hasProperty('metalValidation')) {
 				environmentVariable 'MTL_DEBUG_LAYER', '1'

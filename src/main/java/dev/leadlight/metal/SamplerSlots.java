@@ -58,6 +58,16 @@ public final class SamplerSlots {
 	 * decoration gives them, which is what Metallum binds them at.
 	 */
 	public static void remap(long compiler) {
+		remap(compiler, null);
+	}
+
+	/**
+	 * The same, for a Metallum that places each binding at a Metal index of its own rather than at
+	 * its SPIR-V binding: {@code textureIndex[binding]} is where Metallum put that binding's texture,
+	 * which the slot table then keeps it at while the sampler moves to its slot. Called after
+	 * Metallum's own placement, since the last placement of a binding is the one SPIRV-Cross keeps.
+	 */
+	public static void remap(long compiler, int @Nullable [] textureIndex) {
 		try (MemoryStack stack = MemoryStack.stackPush()) {
 			int model = Spvc.spvc_compiler_get_execution_model(compiler);
 			int stage = model == Spv.SpvExecutionModelVertex ? VERTEX
@@ -141,8 +151,8 @@ public final class SamplerSlots {
 				binding.stage(model)
 						.desc_set(sets[i])
 						.binding(bindings[i])
-						.msl_buffer(bindings[i])
-						.msl_texture(bindings[i])
+						.msl_buffer(textureAt(textureIndex, bindings[i]))
+						.msl_texture(textureAt(textureIndex, bindings[i]))
 						.msl_sampler(slot);
 				Spvc.spvc_compiler_msl_add_resource_binding(compiler, binding);
 			}
@@ -155,6 +165,11 @@ public final class SamplerSlots {
 	}
 
 	/** Metal's sampler slots in one stage. */
+	private static int textureAt(int @Nullable [] textureIndex, int binding) {
+		return textureIndex == null || binding < 0 || binding >= textureIndex.length ? binding
+				: textureIndex[binding];
+	}
+
 	private static final int SLOTS = 16;
 
 	private static final java.util.regex.Pattern COLOUR = java.util.regex.Pattern.compile("colortex\\d+");
@@ -195,7 +210,30 @@ public final class SamplerSlots {
 	 * {@code 2b} is its vertex sampler slot and {@code 2b + 1} its fragment one, minus one where that
 	 * stage does not read it. Null where no stage needed a slot other than its binding.
 	 */
+	/** Slot tables handed from a compile to a pipeline built later, possibly on another thread. */
+	private static final java.util.Map<Object, byte[]> ATTACHED =
+			java.util.Collections.synchronizedMap(new java.util.WeakHashMap<>());
+
+	/** Keeps {@code slots} with {@code compiled} until the pipeline built from it {@link #claim}s them. */
+	public static void attach(Object compiled, byte @Nullable [] slots) {
+		if (slots != null) {
+			ATTACHED.put(compiled, slots);
+		}
+	}
+
+	public static byte @Nullable [] claim(Object compiled) {
+		return ATTACHED.remove(compiled);
+	}
+
 	public static byte @Nullable [] take() {
+		return take(false);
+	}
+
+	/**
+	 * @param always keep the table even where every sampler stayed at its binding, for a Metallum
+	 *               that binds samplers at an index of its own rather than at the binding
+	 */
+	public static byte @Nullable [] take(boolean always) {
 		byte[][] building = BUILDING.get();
 		BUILDING.remove();
 		if (building == null) {
@@ -220,7 +258,7 @@ public final class SamplerSlots {
 			}
 		}
 
-		return moved ? table : null;
+		return moved || always ? table : null;
 	}
 
 	/** The slot binding {@code binding} takes in {@code stage}, by a table {@link #take} made. */

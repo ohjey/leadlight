@@ -1,0 +1,10 @@
+{
+	"required": false,
+	"minVersion": "0.8.5",
+	"package": "dev.leadlight.mixin.dh",
+	"compatibilityLevel": "JAVA_21",
+	"injectors": {
+		"defaultRequire": 0
+	},
+	"client": []
+}

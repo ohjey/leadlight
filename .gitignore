@@ -6,3 +6,4 @@ out/
 .idea/
 release/
 .DS_Store
+run-*/

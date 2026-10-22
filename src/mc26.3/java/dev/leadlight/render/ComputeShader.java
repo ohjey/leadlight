@@ -89,6 +89,54 @@ public final class ComputeShader {
 	 * for it to read either way.
 	 */
 	private static Compiled compile(VulkanDevice vulkan, SpvModule module) throws Exception {
+		List<Binding> bindings = rebind(module);
+		try (MemoryStack stack = MemoryStack.stackPush()) {
+			VkShaderModuleCreateInfo info = VkShaderModuleCreateInfo.calloc(stack).sType$Default()
+					.pCode(module.spv());
+			LongBuffer handle = stack.callocLong(1);
+			int result = VK12.vkCreateShaderModule(vulkan.vkDevice(), info, null, handle);
+			if (result != VK12.VK_SUCCESS) {
+				throw new IllegalStateException("vkCreateShaderModule answered " + result);
+			}
+
+			return new Compiled(handle.get(0), bindings);
+		}
+	}
+
+	/** A compute built for Metal: the kernel, and the entries its bindings are numbered by. */
+	public record MetalCompiled(dev.leadlight.metal.MetalKernel kernel, List<Binding> entries) {
+	}
+
+	/**
+	 * The same road as {@link #build}, zeroed locals included, ending in a Metal kernel rather than a
+	 * Vulkan shader module.
+	 */
+	public static @Nullable MetalCompiled buildMetal(Object device, String label, String source,
+			String stage, Function<String, @Nullable ByteBuffer> compile) throws Exception {
+		long began = System.nanoTime();
+		RawLocals.begin();
+		try {
+			ByteBuffer spirv = compile.apply(source);
+			ModuleCache.building(label);
+			if (spirv == null) {
+				return null;
+			}
+
+			try (SPIRVModule module = new SPIRVModule(RawLocals.patch(label, spirv),
+					ShaderType.VERTEX)) {
+				List<Binding> entries = rebind(module);
+				dev.leadlight.metal.MetalKernel kernel =
+						dev.leadlight.metal.MetalKernel.build(device, module.spv(), label);
+				return kernel == null ? null : new MetalCompiled(kernel, entries);
+			}
+		} finally {
+			RawLocals.end();
+			LoadClock.module(System.nanoTime() - began);
+		}
+	}
+
+	/** Numbers the module's descriptors in place, and says what each number binds. */
+	private static List<Binding> rebind(SpvModule module) throws Exception {
 		SpvModule.Reflection reflection = module.reflect();
 		List<Binding> bindings = new ArrayList<>();
 		int binding = 0;
@@ -113,16 +161,6 @@ public final class ComputeShader {
 			}
 		}
 
-		try (MemoryStack stack = MemoryStack.stackPush()) {
-			VkShaderModuleCreateInfo info = VkShaderModuleCreateInfo.calloc(stack).sType$Default()
-					.pCode(module.spv());
-			LongBuffer handle = stack.callocLong(1);
-			int result = VK12.vkCreateShaderModule(vulkan.vkDevice(), info, null, handle);
-			if (result != VK12.VK_SUCCESS) {
-				throw new IllegalStateException("vkCreateShaderModule answered " + result);
-			}
-
-			return new Compiled(handle.get(0), List.copyOf(bindings));
-		}
+		return List.copyOf(bindings);
 	}
 }

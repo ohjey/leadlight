@@ -17,15 +17,16 @@ Metallum, Iris or OptiFine.
 
 | Component | Version |
 | --- | --- |
-| Minecraft | 26.2 |
+| Minecraft | 26.2 or 26.3, one jar each |
 | Fabric Loader | 0.19.3 or later, with Fabric API |
-| Metallum | 0.0.24 (exactly: Leadlight hooks Metallum's internals) |
+| Metallum | 0.0.24 on 26.2, 0.0.25 on 26.3 (exactly: Leadlight hooks Metallum's internals) |
 | Sodium | 0.9.x |
 | Mac | Apple silicon (M1 or later) |
 
 ## Install
 
-1. Put `leadlight-<version>.jar` in `mods/` next to Metallum, Sodium and Fabric API.
+1. Put the jar for your game, `leadlight-<version>+mc26.2.jar` or `leadlight-<version>+mc26.3.jar`,
+   in `mods/` next to Metallum, Sodium and Fabric API.
 2. Leave **Video Settings > Graphics API** on its default, which Metallum labels **Prefer Metal**.
 3. Put shader packs in `shaderpacks/` as usual, and pick one on the **Leadlight** page of the video
    settings, or with the `I` key. `K` turns shaders off and on, `R` reloads the pack from disk.
@@ -60,7 +61,7 @@ Everything the engine did through Vulkan is done through Metal here:
 - **Distant Horizons** is told Metal is not OpenGL. It names only Vulkan and OpenGL, and on Metal
   took the OpenGL road, whose lightmap hook casts the game's texture to an OpenGL one and stopped the
   game at the loading screen; it now draws through Blaze3D as it does under Vitrail on Vulkan, and
-  its far terrain reaches the pack.
+  its far terrain reaches the pack. On 26.3, Metallum 0.0.25 does this itself.
 - **Resource-pack normal and specular maps** are uploaded one whole mip level at a time. One upload
   per sprite and level, as on Vulkan, costs Metallum a staging copy and a blit encoder each; with
   Continuity over a pack like Patrix that was tens of thousands in one command buffer, which the GPU
@@ -71,8 +72,8 @@ Everything the engine did through Vulkan is done through Metal here:
 
 And Metallum itself is extended where a shader pack needs more than the game does:
 
-- up to **8 colour targets** per pass (Metallum 0.0.24 attaches one), with pipeline variants for
-  passes that attach a different set;
+- up to **8 colour targets** per pass on 26.2 (Metallum 0.0.24 attaches one), with pipeline variants
+  for passes that attach a different set; Metallum 0.0.25 attaches them itself;
 - **sampler slots numbered per stage**, and samplers baked into the shader past Metal's sixteen;
 - fragment outputs padded to the target's components, which Metal requires;
 - **1D and 3D sampled textures**;
@@ -106,9 +107,9 @@ These were bugs in Vitrail on Vulkan as well, fixed in Leadlight:
 
 - **Geometry shaders.** Metal has no geometry stage. As on a Vulkan device without one, a geometry
   stage that only passes vertices through is folded away and any other program is refused.
-- **Background shader compilation.** Vitrail compiles the families a pack draws later (entities,
-  particles, ...) ahead of time on Vulkan only; here they compile on their first draw, which can
-  cost a short hitch the first time each appears.
+- **Background shader compilation on 26.2.** Vitrail compiles the families a pack draws later
+  (entities, particles, ...) ahead of time on Vulkan only; on 26.2 they compile on their first draw,
+  which can cost a short hitch the first time each appears. On 26.3 they compile ahead on Metal too.
 - **Pass timings** (`-Dleadlight.passTimings`): Metallum has no GPU timestamps.
 
 ## Tested
@@ -120,16 +121,24 @@ the Overworld, Nether and End, day and night, on a recent JDK and on the Modrint
 Photon and BSL with Entity Texture Features 7.2.6, Entity Model Features 3.3.12 and Fresh Animations
 1.10.5 with its Extensions and Player packs; Photon with Distant Horizons 3.3.3; Photon with Continuity 3.0.1 and Patrix 32x.
 
+On Minecraft 26.3 with Metallum 0.0.25 and Sodium 0.9.2: Photon 1.4, Complementary Reimagined
+r5.9.3, BSL 10.1.8, Noble 1.9.9 and Bliss 2.1.2 in the Overworld by day, on the Modrinth launcher's
+Zulu 25.
+
 ## Building
 
 Needs JDK 25.
 
 ```bash
-./gradlew build
+./gradlew build                  # Minecraft 26.2, Metallum 0.0.24
+./gradlew build -Pminecraft=26.3 # Minecraft 26.3, Metallum 0.0.25
 ```
 
-The jar is written to `build/libs/`. `./gradlew runClient` starts a development client with
-Metallum, Sodium and Fabric API. For unattended checks, `-Dleadlight.debugScript=<file>` runs a
+Each game's jar is written to `build/mc<game>/libs/`. What each game pins is in
+`versions/<game>.properties`; the sources both share are in `src/main`, and what differs, the
+Metallum hooks above all, in `src/mc<game>`. `./gradlew runClient` (with the same `-Pminecraft`)
+starts a development client with Metallum, Sodium and Fabric API, in `run/` for 26.2 and
+`run-26.3/` for 26.3. For unattended checks, `-Dleadlight.debugScript=<file>` runs a
 list of steps once a world is on screen (see `dev/DebugScript.java`).
 
 ## Credits and licence

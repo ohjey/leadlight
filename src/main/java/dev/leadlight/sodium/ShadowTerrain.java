@@ -17,7 +17,6 @@ import com.mojang.blaze3d.GpuDeviceLossException;
 import com.mojang.blaze3d.systems.RenderSystem;
 import com.mojang.blaze3d.textures.FilterMode;
 import com.mojang.blaze3d.textures.GpuSampler;
-import net.caffeinemc.mods.sodium.client.gpu.device.backend.DrawBackend;
 import net.caffeinemc.mods.sodium.client.render.SodiumWorldRenderer;
 import net.caffeinemc.mods.sodium.client.render.chunk.ChunkRenderMatrices;
 import net.caffeinemc.mods.sodium.client.render.chunk.RenderSectionManager;
@@ -172,7 +171,7 @@ public final class ShadowTerrain {
 		// nothing of ours is ever served, so the stage would walk and draw the whole world a second
 		// time with the game's own shader, into the game's own target. This is exactly the state a
 		// failed Vulkan boot leaves the machine in.
-		if (DrawBackend.BACKEND == DrawBackend.OPENGL) {
+		if (ChunkBackend.openGl()) {
 			return;
 		}
 

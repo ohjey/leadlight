@@ -7,8 +7,8 @@ including features Iris can't run on macOS's OpenGL 4.1, such as compute shaders
 skylight and coloured lights).
 
 ### Requirements
-- Minecraft 26.2, Fabric Loader 0.19.3+, Fabric API
-- [Metallum](https://modrinth.com/mod/metallum-mc) **0.0.24** (exactly)
+- Minecraft 26.2 or 26.3 (download the file for your version), Fabric Loader 0.19.3+, Fabric API
+- [Metallum](https://modrinth.com/mod/metallum-mc) **0.0.24** for 26.2, **0.0.25** for 26.3 (exactly)
 - [Sodium](https://modrinth.com/mod/sodium) 0.9.x
 - An Apple silicon Mac (M1 or later)
 

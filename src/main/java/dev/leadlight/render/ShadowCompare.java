@@ -175,6 +175,22 @@ public final class ShadowCompare {
 	 * once per pipeline a pass draws with, the map behind it being a weak one under a monitor,
 	 * and the set answers for every descriptor of every draw after that.
 	 */
+	/**
+	 * The same, asked by the pipeline's location, for a backend that is handed the pipeline's name
+	 * rather than the pipeline: Metallum 0.0.25 builds from a create-info that carries no more.
+	 */
+	public static Set<String> compared(String location) {
+		synchronized (COMPARED) {
+			for (Map.Entry<RenderPipeline, Set<String>> entry : COMPARED.entrySet()) {
+				if (entry.getKey().getLocation().toString().equals(location)) {
+					return entry.getValue();
+				}
+			}
+		}
+
+		return Set.of();
+	}
+
 	public static Set<String> compared(RenderPipeline pipeline) {
 		Set<String> names = COMPARED.get(pipeline);
 

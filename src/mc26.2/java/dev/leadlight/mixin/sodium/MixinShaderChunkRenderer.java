@@ -10,7 +10,7 @@ import com.llamalad7.mixinextras.sugar.Local;
 import com.mojang.blaze3d.pipeline.RenderPipeline;
 import com.mojang.blaze3d.textures.GpuSampler;
 import com.mojang.blaze3d.vertex.VertexFormat;
-import net.caffeinemc.mods.sodium.client.gpu.device.backend.DrawBackend;
+import dev.leadlight.sodium.ChunkBackend;
 import net.caffeinemc.mods.sodium.client.render.chunk.ShaderChunkRenderer;
 import net.caffeinemc.mods.sodium.client.render.chunk.terrain.TerrainRenderPass;
 import net.caffeinemc.mods.sodium.client.util.FogParameters;
@@ -82,9 +82,10 @@ public abstract class MixinShaderChunkRenderer {
 	@Inject(method = "compileProgram", at = @At("HEAD"), cancellable = true)
 	private void leadlight$terrain(CallbackInfoReturnable<RenderPipeline> callback,
 			@Local(argsOnly = true) TerrainRenderPass pass) {
-		// The region offset arrives through push constants, which only the Vulkan backend pushes at
-		// all: under OpenGL Sodium sets it as an ordinary uniform and our shader would read nothing.
-		if (DrawBackend.BACKEND == DrawBackend.OPENGL) {
+		// The region offset arrives through push constants, which only the Vulkan and Metal backends
+		// push at all: under OpenGL Sodium sets it as an ordinary uniform and our shader would read
+		// nothing.
+		if (ChunkBackend.openGl()) {
 			return;
 		}
 
