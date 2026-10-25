@@ -32,7 +32,9 @@ import com.mojang.blaze3d.systems.CommandEncoder;
 import com.mojang.blaze3d.systems.GpuDevice;
 import com.mojang.blaze3d.systems.RenderSystem;
 import com.mojang.blaze3d.textures.GpuTextureView;
+import com.mojang.blaze3d.pipeline.TextureTarget;
 import net.minecraft.client.Minecraft;
+import org.jspecify.annotations.Nullable;
 import net.minecraft.client.renderer.MappableRingBuffer;
 import net.minecraft.network.chat.Component;
 import net.minecraft.util.Mth;
@@ -315,6 +317,12 @@ public final class PackChain {
 	/** The game's translucent features, caught and composed onto the pack's image. Null when the
 	 * pack serves no translucent pass to compose in front of. */
 	private final FeatureLayer features;
+	/**
+	 * What mods draw by name into the game's main target while the level is still being drawn,
+	 * Litematica's schematic and its overlay among them, caught as {@link #features} catches the
+	 * game's translucent features and composed onto the same attachment. Null where that one is.
+	 */
+	private final FeatureLayer modDraws;
 	private final int load;
 	final TerrainDraw terrain;
 	private final SkyDraw sky;
@@ -386,6 +394,9 @@ public final class PackChain {
 	 */
 	private boolean redirected;
 
+	/** Whether {@link #openModDraws} handed out the layer this frame, the same rule as {@link #redirected}. */
+	private boolean modDrawsOpen;
+
 	PackChain(PackProgram.Chain chain, PackValues values, String world, boolean seedEnabled,
 			OpenedPack opened, Path packPath, Map<String, OptionValue> chosen, String profile) {
 		// One pack's shadow map is not another's, and the arming file is read again here so a
@@ -430,6 +441,8 @@ public final class PackChain {
 				.filter(into -> !holdsIntegers(into.target()))
 				.map(into -> new FeatureLayer(into, this.targets.format(into.target())))
 				.orElse(null);
+		this.modDraws = this.features == null ? null
+				: new FeatureLayer(this.features.into(), this.targets.format(this.features.into().target()));
 		// Held rather than read: the terrain program is compiled against the chunk mesh format, and
 		// nothing knows that format until the renderer asks for its shader.
 		//
@@ -2137,6 +2150,91 @@ public final class PackChain {
 	}
 
 	/**
+	 * Hands out the layer a mod's draws into the main target are caught in, emptied, or null when
+	 * nothing should be redirected and those draws stay where they were made. Called from the head
+	 * of the game's outline phase, which is where Litematica draws its schematic and its overlay
+	 * ({@code executeOutline}, HEAD and TAIL), each through a pass of its own opened on the main
+	 * target by name. The caller points the main target's colour at the layer for the length of
+	 * the phase and puts it back before {@link #closeModDraws()}.
+	 * <p>
+	 * The reason is the one {@link #openFeatures()} gives for the game's own features: what lands
+	 * on the main target is either painted over by the final or, through the seed, shown only
+	 * where the pack drew nothing. Under Iris these draws reach the pack's programs through
+	 * {@code IrisApi.assignPipeline}; there is no such door here, so they are composed instead,
+	 * flat and in front of the world, the way the features layer composes what it catches. The
+	 * world's depth is not redirected, so they still hide behind terrain.
+	 * <p>
+	 * Must run outside any render pass, as the layer's emptying does.
+	 */
+	public static @Nullable TextureTarget openModDraws() {
+		PackChain chain = active;
+		GpuDevice device = RenderSystem.tryGetDevice();
+		Minecraft minecraft = Minecraft.getInstance();
+		if (disabled || chain == null || device == null || minecraft == null || !chainWanted
+				|| chain.modDraws == null) {
+			return null;
+		}
+
+		RenderTarget main = minecraft.gameRenderer.mainRenderTarget();
+
+		try {
+			if (main == null || !chain.modDraws.prepare(device) || !chain.drawable()) {
+				return null;
+			}
+
+			GraphicsApi.suspendLevelPass();
+			if (chain.modDraws.open(device, main.width, main.height) == null) {
+				return null;
+			}
+
+			chain.modDrawsOpen = true;
+
+			return chain.modDraws.target();
+		} catch (GpuDeviceLossException e) {
+			throw e;
+		} catch (RuntimeException e) {
+			chain.modDrawsOpen = false;
+			stop();
+			Leadlight.logger().error("Leadlight stopped drawing this pack after an error", e);
+			chain.release();
+
+			return null;
+		}
+	}
+
+	/**
+	 * Composes what {@link #openModDraws()} caught onto the attachment the features layer is
+	 * composed onto. The main target's colour has to be the game's own again before this runs.
+	 */
+	public static void closeModDraws() {
+		PackChain chain = active;
+		if (chain == null || !chain.modDrawsOpen) {
+			return;
+		}
+
+		chain.modDrawsOpen = false;
+
+		GpuDevice device = RenderSystem.tryGetDevice();
+		if (disabled || device == null || chain.modDraws == null) {
+			return;
+		}
+
+		try {
+			GraphicsApi.suspendLevelPass();
+			ChainPlan.Attachment into = chain.modDraws.into();
+			GpuTextureView view = chain.targets.view(into.target(), into.side());
+			chain.modDraws.compose(device.createCommandEncoder(), chain.quad, view,
+					chain.targets.takeClear(view));
+		} catch (GpuDeviceLossException e) {
+			throw e;
+		} catch (RuntimeException e) {
+			stop();
+			Leadlight.logger().error("Leadlight stopped drawing this pack after an error", e);
+			chain.release();
+		}
+	}
+
+	/**
 	 * Draws the begins, on the far plane and the depths of the frame before.
 	 * <p>
 	 * <strong>The depth names do not answer alike here, and Iris is why.</strong> Its
@@ -3309,6 +3407,9 @@ public final class PackChain {
 		this.targets.release();
 		if (this.features != null) {
 			this.features.release();
+		}
+		if (this.modDraws != null) {
+			this.modDraws.release();
 		}
 
 		// DH takes its far terrain back with the pack, its own frame order included: DhLods.handBack
