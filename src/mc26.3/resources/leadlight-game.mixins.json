@@ -12,11 +12,13 @@
 		"GameRendererTransparencyMixin",
 		"LevelRendererFeaturesMixin",
 		"LevelRendererMainPassMixin",
+		"LevelRendererModDrawsMixin",
 		"PipelineBuilderMixin",
 		"PipelineCacheAccessor",
 		"RenderPipelinesAccessor",
 		"RenderSystemAccessor",
 		"RenderSystemMixin",
+		"RenderTargetAccessor",
 		"SkyRendererMixin",
 		"SPIRVModuleMixin",
 		"VulkanRenderPipelineAccessor"

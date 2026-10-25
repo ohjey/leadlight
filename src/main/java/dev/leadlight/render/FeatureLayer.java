@@ -266,6 +266,14 @@ final class FeatureLayer {
 		return this.layer.getColorTextureView();
 	}
 
+	/**
+	 * The layer's own image after {@link #open}, for a caller that has to point something other than
+	 * the features redirect at it: the main target's colour, while a mod draws into it by name.
+	 */
+	TextureTarget target() {
+		return this.layer;
+	}
+
 	/** Called every frame: a resource reload empties the pipeline cache. */
 	boolean prepare(GpuDevice device) {
 		if (GraphicsApi.valid(GraphicsApi.compile(device, this.pipeline, this.source))) {
